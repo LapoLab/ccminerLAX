@@ -32,6 +32,7 @@ enum sha_algos {
 	ALGO_LYRA2,
 	ALGO_LYRA2v2,
 	ALGO_LYRA2Z,
+	ALGO_LYRA2ZZ,
 	ALGO_MJOLLNIR,		/* Hefty hash */
 	ALGO_MYR_GR,
 	ALGO_NEOSCRYPT,

@@ -1643,13 +1643,13 @@ static bool stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 		memcpy(&work->data[12], sctx->job.coinbase, 32); // merkle_root
 		work->data[20] = 0x80000000;
 		if (opt_debug) applog_hex(work->data, 80);
-	} else if (opt_algo == ALGO_LYRA2ZZ){
+	} else if (opt_algo == ALGO_LYRA2ZZ){ // newly added experimental LAPO support (4/26/2018)
 		for (i = 0; i < 8; i++)
 			work->data[9 + i] = be32dec((uint32_t *)merkle_root + i);
 		work->data[17] = le32dec(sctx->job.ntime);
 		work->data[18] = le32dec(sctx->job.nbits);
 		for (i = 0; i < 8; i++)
-			work->data[20 + i] = be32dec((uint32_t *)sctx->job.accmulatorcheckpoint + i);
+			work->data[20 + i] = be32dec((uint32_t *)sctx->job.accumulatorcheckpoint + i);
 		work->data[28] = 0x80000000;
 		work->data[31] = (opt_algo == ALGO_MJOLLNIR) ? 0x000002A0 : 0x00000280;
 	} else {

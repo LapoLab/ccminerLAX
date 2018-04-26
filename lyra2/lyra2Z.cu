@@ -13,6 +13,9 @@ extern void blake256_cpu_init(int thr_id, uint32_t threads);
 extern void blake256_cpu_hash_80(const int thr_id, const uint32_t threads, const uint32_t startNonce, uint64_t *Hash, int order);
 extern void blake256_cpu_setBlock_80(uint32_t *pdata);
 
+extern void blake256_cpu_hash_112(const int thr_id, const uint32_t threads, const uint32_t startNonce, uint64_t *Hash, int order);
+extern void blake256_cpu_setBlock_112(uint32_t *pdata);
+
 extern void lyra2Z_cpu_init(int thr_id, uint32_t threads, uint64_t *d_matrix);
 extern void lyra2Z_cpu_init_sm2(int thr_id, uint32_t threads);
 extern void lyra2Z_cpu_free(int thr_id);
