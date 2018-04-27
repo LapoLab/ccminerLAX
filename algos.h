@@ -105,6 +105,7 @@ static const char *algo_names[] = {
 	"lyra2",
 	"lyra2v2",
 	"lyra2z",
+	"lyra2zz",
 	"mjollnir",
 	"myr-gr",
 	"neoscrypt",
@@ -182,6 +183,8 @@ static inline int algo_to_int(char* arg)
 			i = ALGO_LYRA2;
 		else if (!strcasecmp("lyra2rev2", arg))
 			i = ALGO_LYRA2v2;
+		else if (!strcasecmp("lyra2zz", arg))
+			i = ALGO_LYRA2ZZ;
 		else if (!strcasecmp("phi1612", arg))
 			i = ALGO_PHI;
 		else if (!strcasecmp("bitcoin", arg))

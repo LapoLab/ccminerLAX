@@ -264,6 +264,7 @@ Options:\n\
 			lyra2       CryptoCoin\n\
 			lyra2v2     VertCoin\n\
 			lyra2z      ZeroCoin (3rd impl)\n\
+			lyra2zz     lapo-zerocoin\n\
 			myr-gr      Myriad-Groestl\n\
 			neoscrypt   FeatherCoin, Phoenix, UFO...\n\
 			nist5       NIST5 (TalkCoin)\n\
@@ -1253,6 +1254,23 @@ static bool get_upstream_work(CURL *curl, struct work *work)
 			return rc;
 		}
 		return rc;
+	}
+
+	/* since the corresponding wallet doesn't use getwork, we ignore it */
+	if (opt_algo == ALGO_LYRA2ZZ) {
+		gettimeofday(&tv_end, NULL); /* this is only here because it's used in the ALGO_SIA block above in the same way */
+
+		if (!get_mininginfo(curl, work)) {
+			applog(LOG_ERR, "get_upstream_work ALGO_LYRA2ZZ get_mininginfo failure");
+			return false;
+		}
+
+		if (!get_blocktemplate(curl, work)) {
+			applog(LOG_ERR, "get_upstream_work ALGO_LYRA2ZZ get_blocktemplate failure");
+			return false;
+		}
+
+		return true;
 	}
 
 	if (opt_debug_threads)
