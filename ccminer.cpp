@@ -9,6 +9,15 @@
  * any later version.  See COPYING for more details.
  */
 
+/* 
+ * This is needed in gbt_work_decode for 
+ * reading the accumulatorcheckpoint string.
+ * Note that this shouldn't be included
+ * after any header that includes stdbool.h,
+ * otherwise macro redefinition conflicts will occur.
+ */
+#include "uint256.h" 
+
 #include <ccminer-config.h>
 
 #include <stdio.h>
@@ -64,6 +73,8 @@ BOOL WINAPI ConsoleHandler(DWORD);
 #ifdef USE_WRAPNVML
 nvml_handle *hnvml = NULL;
 #endif
+
+#define LOG_LYRA2ZZ_HEADER __func__ " lyra2zz - "
 
 enum workio_commands {
 	WC_GET_WORK,
@@ -1151,6 +1162,28 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 		}
 	}
 
+	if (opt_algo == ALGO_LYRA2ZZ) {
+		json_t *accum = json_object_get(val, "accumulatorcheckpoint");
+
+		const char* str = nullptr;
+
+		if (!accum || !(str = json_string_value(accum))) {
+			applog(LOG_ERR, LOG_LYRA2ZZ_HEADER "bad accumulatorcheckpoint in getblocktemplate: %s", (!accum ? "entry not found" : "value isn't a string"));	
+			return false;
+		}
+
+		uint256 accum_i{std::string(str)};
+
+		uint64_t data[4] = {
+			accum_i.Get64(0),
+			accum_i.Get64(1),
+			accum_i.Get64(2),
+			accum_i.Get64(3)
+		};
+
+		memcpy(work->data + 20, &data[0], sizeof(data));
+	}
+
 	return true;
 }
 
@@ -1268,12 +1301,12 @@ static bool get_upstream_work(CURL *curl, struct work *work)
 		gettimeofday(&tv_end, NULL); /* this is only here because it's used in the ALGO_SIA block above in the same way */
 
 		if (!get_mininginfo(curl, work)) {
-			applog(LOG_ERR, "get_upstream_work ALGO_LYRA2ZZ get_mininginfo failure");
+			applog(LOG_ERR, LOG_LYRA2ZZ_HEADER "get_mininginfo failure");
 			return false;
 		}
 
 		if (!get_blocktemplate(curl, work)) {
-			applog(LOG_ERR, "get_upstream_work ALGO_LYRA2ZZ get_blocktemplate failure");
+			applog(LOG_ERR, LOG_LYRA2ZZ_HEADER "get_blocktemplate failure");
 			return false;
 		}
 
