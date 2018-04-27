@@ -80,9 +80,16 @@ struct workio_cmd {
 	int pooln;
 };
 
+#if defined(OPT_DEBUG_FLAGS)
+bool opt_debug = true;
+bool opt_debug_diff = true;
+bool opt_debug_threads = true;
+#else
 bool opt_debug = false;
 bool opt_debug_diff = false;
 bool opt_debug_threads = false;
+#endif
+
 bool opt_protocol = false;
 bool opt_benchmark = false;
 bool opt_showdiff = true;
