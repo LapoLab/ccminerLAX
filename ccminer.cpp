@@ -1676,7 +1676,7 @@ static bool stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 		for (i = 0; i < 8; i++)
 			work->data[20 + i] = be32dec((uint32_t *)sctx->job.accumulatorcheckpoint + i);
 		work->data[28] = 0x80000000;
-		work->data[31] = (opt_algo == ALGO_MJOLLNIR) ? 0x000002A0 : 0x00000280;
+		work->data[31] = /*(opt_algo == ALGO_MJOLLNIR) ? 0x000002A0 : */0x00000280;
 	} else {
 		for (i = 0; i < 8; i++)
 			work->data[9 + i] = be32dec((uint32_t *)merkle_root + i);
