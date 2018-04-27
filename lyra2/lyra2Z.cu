@@ -170,7 +170,7 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 {
 	uint32_t *pdata = work->data;
 	uint32_t *ptarget = work->target;
-	uint32_t _ALIGN(64) endiandata[20];
+	uint32_t _ALIGN(64) endiandata[28];
 	const uint32_t first_nonce = pdata[19];
 	int dev_id = device_map[thr_id];
 
