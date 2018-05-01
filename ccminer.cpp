@@ -54,6 +54,7 @@
 #include "sia/sia-rpc.h"
 #include "crypto/xmr-rpc.h"
 #include "equi/equihash.h"
+#include "lyra2/Lyra2Z.h"
 
 #include <cuda_runtime.h>
 
@@ -1964,6 +1965,10 @@ static void *miner_thread(void *userdata)
 		} else if (opt_algo == ALGO_EQUIHASH) {
 			nonceptr = &work.data[EQNONCE_OFFSET]; // 27 is pool extranonce (256bits nonce space)
 			wcmplen = 4+32+32;
+		} else if (opt_algo == ALGO_LYRA2ZZ) {
+			// note that nonce lies right before accumulator checkpoint
+			nonceptr = work.data + LYRA2ZZ_BLOCK_HEADER_NONCE_OFFSET;
+			wcmplen = LYRA2ZZ_BLOCK_HEADER_LEN_BYTES;
 		}
 
 		if (have_stratum) {
