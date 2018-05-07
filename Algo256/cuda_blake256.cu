@@ -143,8 +143,8 @@ __device__ __constant__ static const uint32_t  c_Padding[16] = {
 
 __device__ __constant__ static const uint32_t  c_Padding_112[16] = {
 	0, 0, 0, 0,
-	0, 0, 0, 0,
 	0x80000000, 0, 0, 0,
+	0, 0, 0, 0,
 	0, 1, 0, 640,
 };
 
@@ -594,16 +594,16 @@ void blake256_gpu_hash_112(const uint32_t threads, const uint32_t startNonce, ui
 	if (thread < threads)
 	{
 		uint32_t h[8];
-		uint32_t input[4];
+		uint32_t input[8];
 
 		#pragma unroll
 		for (int i = 0; i < 8; i++) h[i] = cpu_h[i];
 
 		#pragma unroll
-		for (int i = 0; i < 3; ++i) input[i] = c_data[i];
+		for (int i = 0; i < 3; ++i) input[i] = c_data_112[i];
 
 		#pragma unroll
-		for (int i = 4; i < 8; ++i) input[i] = c_data[i];
+		for (int i = 4; i < 8; ++i) input[i] = c_data_112[i];
 
 		input[3] = startNonce + thread;
 		blake256_compress2nd_112(h, input, 640);
