@@ -13,6 +13,8 @@
 
 /* Assumes that accum_e */
 typedef struct lyra2zz_block_header {
+	uint32_t min_nonce;
+	uint32_t max_nonce;
 	uint32_t data[LYRA2ZZ_BLOCK_HEADER_DATA_LEN];
 } lyra2zz_block_header_t;
 
@@ -30,7 +32,7 @@ lyra2zz_block_header_t lyra2zz_make_header(
 		const uint256& merkle_root,
 		uint32_t time,
 		uint32_t bits,
-		uint32_t nonce,
+		uint64_t noncerange,	// low bits = min, 
 		const uint256& accum_checkpoint);
 
 int lyra2z_test_blake_80(void);

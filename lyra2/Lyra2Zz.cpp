@@ -3,6 +3,7 @@
 #include "../miner.h"
 #include "../elist.h"
 #include "Lyra2Z.h"
+#include <vector>
 
 static inline std::string l2zz_gbt_get_jstring(const json_t* blocktemplate, const char* key)
 {
@@ -56,34 +57,6 @@ static bool l2zz_gbt_get_uint256(const json_t *blocktemplate, const char *key, u
 	return true;
 }
 
-lyra2zz_block_header_t lyra2zz_make_header(
-		int32_t version,
-		const uint256& prev_block,
-		const uint256& merkle_root,
-		uint32_t time,
-		uint32_t bits,
-		uint32_t nonce,
-		const uint256& accum_checkpoint)
-{
-	lyra2zz_block_header_t ret;
-
-	memset(&ret, 0, sizeof(ret));
-	
-	ret.data[0] = version;
-	ret.data[17] = time;
-	ret.data[18] = bits;
-	ret.data[19] = nonce;
-
-	memcpy(&ret.data[1], prev_block.begin(), prev_block.size());
-	memcpy(&ret.data[9], merkle_root.begin(), merkle_root.size());
-	memcpy(&ret.data[20], accum_checkpoint.begin(), accum_checkpoint.size());
-
-	ret.data[28] = 0x80000000;
-	ret.data[31] = 0x00000280;
-
-	return ret;
-}
-
 template <typename intType>
 static bool l2zz_get_hex_str(const json_t *blocktemplate, const char *key, intType &out)
 {
@@ -112,7 +85,156 @@ static bool l2zz_get_hex_str(const json_t *blocktemplate, const char *key, intTy
 		return false;
 	}
 
+	out = bits;
+
 	return true;
+}
+
+typedef uint8_t sha256_t[32];
+
+typedef struct l2zz_hash {
+	sha256_t hash;
+} l2zz_hash_t;
+
+static l2zz_hash_t l2zz_double_sha(uint8_t *in, size_t len)
+{
+	l2zz_hash_t l2z1, l2z2;
+
+	sha256d(&l2z1.hash[0], in, (int) len);
+	sha256d(&l2z2.hash[0], &l2z1.hash[0], sizeof(l2z1.hash));
+
+	return l2z2;
+}
+
+static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroot)
+{
+	json_t *arr_tx = json_object_get(blocktemplate, "transactions");
+	size_t num_entries = 0;
+	size_t index = 0;
+
+	if (unlikely(!arr_tx))
+		goto no_tx;
+
+	if (unlikely(!json_is_array(arr_tx)))
+		goto not_array;
+
+	num_entries = json_array_size(arr_tx);
+
+	if (unlikely(num_entries == 0))
+		goto no_entries;
+
+	{
+		std::vector<l2zz_hash_t> hashes{num_entries};
+		json_t *arr_val = nullptr;
+		size_t len = 0;
+		const char* data_str = nullptr;
+
+		json_array_foreach(arr_tx, index, arr_val) {
+			json_t *data = json_object_get(arr_val, "data");
+			std::vector<uint8_t> buff;
+
+			if (unlikely(!json_is_string(data)))
+				goto not_string;
+
+			data_str = json_string_value(data);
+
+			if (unlikely(!data_str))
+				goto bad_string;
+
+			len = strlen(data_str);
+
+			if (unlikely(!len))
+				goto empty_string;
+
+			if (len & 0x1)
+				len++;
+
+			buff.resize(len >> 1);
+
+			// NOTE: is the endianness correct here? verify in the wallet...
+			hex2bin(&buff[0], data_str, len);
+
+			hashes[index] = l2zz_double_sha(&buff[0], buff.size());
+		}
+
+		return true;
+	}
+
+no_tx:
+	applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", 
+			"transactions entry not found...");
+
+	return false;
+
+not_array:
+	applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", 
+			"transactions entry is not an array...");
+
+	return false;
+
+no_entries:
+	applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", 
+		"no entries in transactions array");
+		
+	return false;
+
+not_string:
+	applog(
+		LOG_ERR, 
+		LYRA2ZZ_LOG_HEADER "found a non-string data entry at index %ll. This is invalid, bailing...", 
+		(ssize_t) index
+	);
+
+	return false;
+
+empty_string:
+	applog(
+		LOG_ERR, 
+		LYRA2ZZ_LOG_HEADER "found an empty data entry at index %ll. Bailing...", 
+		(ssize_t) index
+	);
+
+	return false;
+
+bad_string:
+	applog(
+		LOG_ERR, 
+		LYRA2ZZ_LOG_HEADER "bad string returned at index %ll. Bailing...", 
+		(ssize_t) index
+	);
+
+	return false;
+}
+
+lyra2zz_block_header_t lyra2zz_make_header(
+		int32_t version,
+		const uint256& prev_block,
+		const uint256& merkle_root,
+		uint32_t time,
+		uint32_t bits,
+		uint64_t noncerange,
+		const uint256& accum_checkpoint)
+{
+	lyra2zz_block_header_t ret;
+
+	memset(&ret, 0, sizeof(ret));
+	
+	ret.min_nonce = (uint32_t)(noncerange & 0xFFFFFFFF);
+	ret.max_nonce = (uint32_t)(noncerange >> 32);
+
+	ret.data[0] = version;
+	ret.data[17] = time;
+	ret.data[18] = bits;
+	ret.data[19] = ret.min_nonce;
+
+	memcpy(&ret.data[1], prev_block.begin(), prev_block.size());
+	memcpy(&ret.data[9], merkle_root.begin(), merkle_root.size());
+	memcpy(&ret.data[20], accum_checkpoint.begin(), accum_checkpoint.size());
+
+	ret.data[28] = 0x80000000;
+	ret.data[31] = 0x00000280;
+
+	return ret;
 }
 
 int lyra2zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_header_t *header)
@@ -132,6 +254,10 @@ int lyra2zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 
 	if (!l2zz_get_hex_str(blocktemplate, "noncerange", noncerange)) return false;
 
+	be32enc(&bits, bits);
+
+	if (!l2zz_gbt_calc_merkle_root(blocktemplate, merkle_root)) return false;
+
 	// TODO: calculate merkle_root
 
 	if (header) {
@@ -140,7 +266,7 @@ int lyra2zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 			prev_block_hash, 
 			merkle_root, 
 			time, bits, 
-			(uint32_t)(noncerange & 0xFFFFFFFF),
+			noncerange,
 			accum
 		);
 	}
