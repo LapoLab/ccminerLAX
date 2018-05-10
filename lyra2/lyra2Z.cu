@@ -277,6 +277,28 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	return 0;
 }
 
+// ONLY used for unit tests
+extern "C" int lyra2Z_copy_d_hash(int thr_id, uint64_t **dest)
+{
+	if (!dest)
+		return false;
+
+	if (!init[thr_id])
+		return false;
+
+	size_t sz = d_hash_size_bytes;
+
+	*dest = (uint64_t *) malloc(sz);
+	if (!(*dest))
+		return false;
+	
+	memset(*dest, 0, sz);
+
+	CUDA_SAFE_CALL(cudaMemcpy(*dest, d_hash[thr_id], sz, cudaMemcpyDeviceToHost));
+
+	return true;
+}
+
 // cleanup
 extern "C" void free_lyra2Z(int thr_id)
 {
