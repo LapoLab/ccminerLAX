@@ -58,6 +58,8 @@ static bool init[MAX_GPUS] = { 0 };
 static __thread uint32_t throughput = 0;
 static __thread bool gtx750ti = false;
 
+#define d_hash_size_bytes ((size_t)32 * throughput)
+
 extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done)
 {
 	uint32_t *pdata = work->data;
@@ -101,7 +103,7 @@ extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce
 		else
 			lyra2Z_cpu_init_sm2(thr_id, throughput);
 
-		CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], (size_t)32 * throughput));
+		CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes));
 
 		init[thr_id] = true;
 	}
@@ -209,7 +211,7 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 		else
 			lyra2Z_cpu_init_sm2(thr_id, throughput);
 
-		CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], (size_t)32 * throughput));
+		CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes));
 
 		init[thr_id] = true;
 	}
