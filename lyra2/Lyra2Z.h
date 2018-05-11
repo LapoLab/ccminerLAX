@@ -28,9 +28,6 @@ typedef unsigned char byte;
 #define BLOCK_LEN_BLAKE2_SAFE_INT64 8                                   //512 bits (=64 bytes, =8 uint64_t)
 #define BLOCK_LEN_BLAKE2_SAFE_BYTES (BLOCK_LEN_BLAKE2_SAFE_INT64 * 8)   //same as above, in bytes
 
-#define LYRA2ZZ_BLOCK_HEADER_LEN_BYTES 112
-#define LYRA2ZZ_BLOCK_HEADER_NONCE_OFFSET 19 /* 19 * 4 bytes */
-
 #ifdef BLOCK_LEN_BITS
         #define BLOCK_LEN_INT64 (BLOCK_LEN_BITS/64)      //Block length: 768 bits (=96 bytes, =12 uint64_t)
         #define BLOCK_LEN_BYTES (BLOCK_LEN_BITS/8)       //Block length, in bytes

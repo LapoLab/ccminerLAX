@@ -128,6 +128,10 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 		json_t *arr_val = nullptr;
 		size_t len = 0;
 		const char* data_str = nullptr;
+		uint8_t concat[sizeof(sha256_t) << 1];
+		std::vector<l2zz_hash_t> new_hashes;
+
+		/* create first set of hashes */
 
 		json_array_foreach(arr_tx, index, arr_val) {
 			json_t *data = json_object_get(arr_val, "data");
@@ -156,6 +160,26 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 
 			hashes[index] = l2zz_double_sha(&buff[0], buff.size());
 		}
+
+		/* build up merkle tree until we have a root hash */
+
+		while (hashes.size() > 1) {
+			if (hashes.size() & 1)
+				hashes.push_back(hashes.back());
+		
+			new_hashes.resize(hashes.size() >> 1);
+
+			for (size_t i = 0; i < new_hashes.size(); ++i) {
+				memcpy(&concat[0], &hashes[(i << 1)].hash[0], sizeof(sha256_t));
+				memcpy(&concat[sizeof(sha256_t)], &hashes[(i << 1) + 1].hash[0], sizeof(sha256_t));
+				
+				new_hashes[i] = l2zz_double_sha(&concat[0], sizeof(concat));
+			}
+
+			hashes = std::move(new_hashes);
+		}
+
+		memcpy(mroot.begin(), &hashes[0].hash[0], mroot.size());
 
 		return true;
 	}
@@ -206,6 +230,52 @@ bad_string:
 	return false;
 }
 
+static void l2zz_print_info(lyra2zz_block_header_t *header, const uint256& merkle_root, const uint256& prev_block_hash, const uint256& accum)
+{
+	char *m = bin2hex((const unsigned char *) merkle_root.begin(), merkle_root.size());
+	char *p = bin2hex((const unsigned char *) prev_block_hash.begin(), prev_block_hash.size());
+	char *a = bin2hex((const unsigned char *) accum.begin(), accum.size());
+	char *b = bin2hex((const unsigned char *) &header->block_hash[0], sizeof(header->block_hash));
+
+	/*
+	uint256_32_t mroot, pblock, accum_check, block_hash;
+
+	swab256(&mroot[0], merkle_root.begin());
+	swab256(&pblock[0], prev_block_hash.begin());
+	swab256(&accum_check[0], accum.begin());
+	swab256(&block_hash[0], &header->block_hash[0]);
+	
+	char *m2 = bin2hex((const unsigned char *) &mroot[0], sizeof(mroot));
+	char *p2 = bin2hex((const unsigned char *) &pblock[0], sizeof(pblock));
+	char *a2 = bin2hex((const unsigned char *) &accum_check[0], sizeof(accum_check));
+	char *b2 = bin2hex((const unsigned char *) &block_hash[0], sizeof(block_hash));
+	*/
+
+	std::vector<unsigned char> bhh(sizeof(header->block_hash));
+	memcpy(&bhh[0], header->block_hash, sizeof(header->block_hash));
+	uint256 bh{bhh};
+
+	std::string m2 = merkle_root.GetHex();
+	std::string p2 = prev_block_hash.GetHex();
+	std::string a2 = accum.GetHex();
+	std::string b2 = bh.GetHex();
+
+	applog(LOG_BLUE, 
+		"\n-----\n"
+		"BlockHash: %s\nBlockHash_: %s\n\n"
+		"Merkle Root: %s\nMerkle Root_:%s\n\n"
+		"PrevBlockHash: %s\nPrevBlockHash_: %s\n\n"
+		"Accum Checkpoint: %s\nAccum Checkpoint_: %s\n\n"
+		"Time: %lu"
+		"\n-----\n", 
+		b, b2.c_str(), m, m2.c_str(), p, p2.c_str(), a, a2.c_str(), time);
+			
+	free(b); //free(b2);
+	free(m); //free(m2);
+	free(p); //free(p2);
+	free(a); //free(a2);
+}
+
 lyra2zz_block_header_t lyra2zz_make_header(
 		int32_t version,
 		const uint256& prev_block,
@@ -244,21 +314,28 @@ int lyra2zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 	int32_t version;
 	uint32_t bits, time;
 
-	if (!l2zz_gbt_get_uint256(blocktemplate, "accumulatorcheckpoint", accum)) return false;
-	if (!l2zz_gbt_get_uint256(blocktemplate, "previousblockhash", prev_block_hash)) return false;
+	if (!l2zz_gbt_get_uint256(blocktemplate, "accumulatorcheckpoint", accum)) 
+		return false;
 	
-	if (!l2zz_gbt_get_int(blocktemplate, "version", version)) return false;
-	if (!l2zz_gbt_get_int(blocktemplate, "curtime", time)) return false;
+	if (!l2zz_gbt_get_uint256(blocktemplate, "previousblockhash", prev_block_hash)) 
+		return false;
+	
+	if (!l2zz_gbt_get_int(blocktemplate, "version", version)) 
+		return false;
+	
+	if (!l2zz_gbt_get_int(blocktemplate, "curtime", time)) 
+		return false;
 
-	if (!l2zz_get_hex_str(blocktemplate, "bits", bits)) return false;
+	if (!l2zz_get_hex_str(blocktemplate, "bits", bits)) 
+		return false;
 
-	if (!l2zz_get_hex_str(blocktemplate, "noncerange", noncerange)) return false;
+	if (!l2zz_get_hex_str(blocktemplate, "noncerange", noncerange)) 
+		return false;
 
 	be32enc(&bits, bits);
 
-	if (!l2zz_gbt_calc_merkle_root(blocktemplate, merkle_root)) return false;
-
-	// TODO: calculate merkle_root
+	if (!l2zz_gbt_calc_merkle_root(blocktemplate, merkle_root)) 
+		return false;
 
 	if (header) {
 		*header = lyra2zz_make_header(
@@ -269,6 +346,12 @@ int lyra2zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 			noncerange,
 			accum
 		);
+
+		l2zz_hash_t h = l2zz_double_sha((uint8_t *) &header->data[0], sizeof(header->data));
+		
+		memcpy(&header->block_hash[0], &h.hash[0], sizeof(h.hash));
+
+		l2zz_print_info(header, merkle_root, prev_block_hash, accum);
 	}
 
 	return true;

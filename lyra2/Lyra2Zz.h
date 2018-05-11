@@ -11,8 +11,11 @@
 
 #define LYRA2ZZ_LOG_HEADER __func__ " lyra2zz - "
 
+typedef uint32_t uint256_32_t[8];
+
 /* Assumes that accum_e */
 typedef struct lyra2zz_block_header {
+	uint256_32_t block_hash;
 	uint32_t min_nonce;
 	uint32_t max_nonce;
 	uint32_t data[LYRA2ZZ_BLOCK_HEADER_DATA_LEN];
