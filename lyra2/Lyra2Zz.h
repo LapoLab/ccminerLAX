@@ -27,9 +27,9 @@ struct json_t;
 /* this only returns a bool, but because uint256 is required there's too much macro redefinition 
    conflict issues that occur if stdbool is included here, as well as if bool is declared: its type in the 
    source file gets overriden by the macro definition. */
-int lyra2zz_read_getblocktemplate(const json_t* blocktemplate, lyra2zz_block_header_t *out_header);
+int lyra2Zz_read_getblocktemplate(const json_t* blocktemplate, lyra2zz_block_header_t *out_header);
 
-lyra2zz_block_header_t lyra2zz_make_header(
+lyra2zz_block_header_t lyra2Zz_make_header(
 		int32_t version,
 		const uint256& prev_block,
 		const uint256& merkle_root,
@@ -37,7 +37,5 @@ lyra2zz_block_header_t lyra2zz_make_header(
 		uint32_t bits,
 		uint64_t noncerange,	// low bits = min, 
 		const uint256& accum_checkpoint);
-
-int lyra2z_test_blake_80(void);
 
 #endif // LYRA2ZZ_H_

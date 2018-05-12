@@ -5,6 +5,8 @@
 #include "Lyra2Z.h"
 #include <vector>
 
+extern "C" int lyra2Z_test_blake_80(int thr_id, uint32_t *block_data);
+
 static inline std::string l2zz_gbt_get_jstring(const json_t* blocktemplate, const char* key)
 {
 	json_t *val = json_object_get(blocktemplate, key);
@@ -98,12 +100,13 @@ typedef struct l2zz_hash {
 
 static l2zz_hash_t l2zz_double_sha(uint8_t *in, size_t len)
 {
-	l2zz_hash_t l2z1, l2z2;
+	l2zz_hash_t l2z1; //l2z2;
 
+	// lapo wallet doesn't double sha for merkle root, so we don't either.
 	sha256d(&l2z1.hash[0], in, (int) len);
-	sha256d(&l2z2.hash[0], &l2z1.hash[0], sizeof(l2z1.hash));
+	//sha256d(&l2z2.hash[0], &l2z1.hash[0], sizeof(l2z1.hash));
 
-	return l2z2;
+	return l2z1;
 }
 
 static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroot)
@@ -237,20 +240,6 @@ static void l2zz_print_info(lyra2zz_block_header_t *header, const uint256& merkl
 	char *a = bin2hex((const unsigned char *) accum.begin(), accum.size());
 	char *b = bin2hex((const unsigned char *) &header->block_hash[0], sizeof(header->block_hash));
 
-	/*
-	uint256_32_t mroot, pblock, accum_check, block_hash;
-
-	swab256(&mroot[0], merkle_root.begin());
-	swab256(&pblock[0], prev_block_hash.begin());
-	swab256(&accum_check[0], accum.begin());
-	swab256(&block_hash[0], &header->block_hash[0]);
-	
-	char *m2 = bin2hex((const unsigned char *) &mroot[0], sizeof(mroot));
-	char *p2 = bin2hex((const unsigned char *) &pblock[0], sizeof(pblock));
-	char *a2 = bin2hex((const unsigned char *) &accum_check[0], sizeof(accum_check));
-	char *b2 = bin2hex((const unsigned char *) &block_hash[0], sizeof(block_hash));
-	*/
-
 	std::vector<unsigned char> bhh(sizeof(header->block_hash));
 	memcpy(&bhh[0], header->block_hash, sizeof(header->block_hash));
 	uint256 bh{bhh};
@@ -276,7 +265,7 @@ static void l2zz_print_info(lyra2zz_block_header_t *header, const uint256& merkl
 	free(a); //free(a2);
 }
 
-lyra2zz_block_header_t lyra2zz_make_header(
+lyra2zz_block_header_t lyra2Zz_make_header(
 		int32_t version,
 		const uint256& prev_block,
 		const uint256& merkle_root,
@@ -307,7 +296,7 @@ lyra2zz_block_header_t lyra2zz_make_header(
 	return ret;
 }
 
-int lyra2zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_header_t *header)
+int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_header_t *header)
 {
 	uint256 accum, prev_block_hash, merkle_root;
 	uint64_t noncerange;
@@ -338,26 +327,21 @@ int lyra2zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 		return false;
 
 	if (header) {
-		*header = lyra2zz_make_header(
+		*header = lyra2Zz_make_header(
 			version, 
 			prev_block_hash, 
 			merkle_root, 
-			time, bits, 
+			time, 
+			bits, 
 			noncerange,
 			accum
 		);
 
-		l2zz_hash_t h = l2zz_double_sha((uint8_t *) &header->data[0], sizeof(header->data));
-		
-		memcpy(&header->block_hash[0], &h.hash[0], sizeof(h.hash));
+		if (!lyra2Z_test_blake_80(0, header->data))
+			return false;
 
 		l2zz_print_info(header, merkle_root, prev_block_hash, accum);
 	}
 
 	return true;
-}
-
-int lyra2z_test_blake_80(void)
-{
-	return 0;
 }
