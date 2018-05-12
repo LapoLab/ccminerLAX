@@ -24,6 +24,8 @@ extern uint32_t lyra2Z_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startN
 extern void lyra2Z_setTarget(const void *ptarget);
 extern uint32_t lyra2Z_getSecNonce(int thr_id, int num);
 
+
+
 extern "C" void lyra2Z_hash(void *state, const void *input)
 {
 	uint32_t _ALIGN(64) hashA[8], hashB[8];
@@ -59,6 +61,46 @@ static __thread uint32_t throughput = 0;
 static __thread bool gtx750ti = false;
 
 #define d_hash_size_bytes ((size_t)32 * throughput)
+
+static void maybe_init_thread_data(int thr_id, int dev_id, uint32_t max_nonce, uint32_t first_nonce)
+{
+	if (init[thr_id])
+		return;
+
+	cudaSetDevice(dev_id);
+	if (opt_cudaschedule == -1 && gpu_threads == 1) {
+		cudaDeviceReset();
+		cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
+		CUDA_LOG_ERROR();
+	}
+
+	cuda_get_arch(thr_id);
+	int intensity = (device_sm[dev_id] > 500 && !is_windows()) ? 17 : 16;
+	if (device_sm[dev_id] <= 500) intensity = 15;
+	throughput = cuda_default_throughput(thr_id, 1U << intensity); // 18=256*256*4;
+	if (init[thr_id]) throughput = min(throughput, max_nonce - first_nonce);
+
+	cudaDeviceProp props;
+	cudaGetDeviceProperties(&props, dev_id);
+	gtx750ti = (strstr(props.name, "750 Ti") != NULL);
+
+	gpulog(LOG_INFO, thr_id, "Intensity set to %g, %u cuda threads", throughput2intensity(throughput), throughput);
+
+	blake256_cpu_init(thr_id, throughput);
+
+	if (device_sm[dev_id] >= 350)
+	{
+		size_t matrix_sz = device_sm[dev_id] > 500 ? sizeof(uint64_t) * 4 * 4 : sizeof(uint64_t) * 8 * 8 * 3 * 4;
+		CUDA_SAFE_CALL(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
+		lyra2Z_cpu_init(thr_id, throughput, d_matrix[thr_id]);
+	}
+	else
+		lyra2Z_cpu_init_sm2(thr_id, throughput);
+
+	CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes));
+
+	init[thr_id] = true;
+}
 
 extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done)
 {
@@ -297,6 +339,65 @@ extern "C" int lyra2Z_copy_d_hash(int thr_id, uint64_t **dest)
 	CUDA_SAFE_CALL(cudaMemcpy(*dest, d_hash[thr_id], sz, cudaMemcpyDeviceToHost));
 
 	return true;
+}
+
+
+extern "C" int lyra2Z_test_blake_80(int thr_id, uint32_t *block_data)
+{
+	// NOTE! try test comparing only blake hash, and move onto lyra after you've verified they're correct.
+
+	uint8_t hash_cpu[32];
+
+	block_data[19] = 0;
+
+	maybe_init_thread_data(thr_id, 0, UINT32_MAX, /*block_data[19]*/ 0);
+
+	blake256hash(hash_cpu, block_data, 14);
+	//lyra2Z_hash(hash_cpu, block_data);
+
+	blake256_cpu_setBlock_80(block_data);
+	blake256_cpu_hash_80(thr_id, throughput, /*block_data[19]*/ 0, d_hash[thr_id], 0);
+	//lyra2Z_cpu_hash_32(thr_id, throughput, block_data[19], d_hash[thr_id], gtx750ti);
+
+	uint64_t *hash_gpu;
+	
+
+	if (!lyra2Z_copy_d_hash(thr_id, &hash_gpu))
+		return false;
+
+	int r = false;
+
+	size_t gpulen = d_hash_size_bytes;
+	size_t gpulen64 = gpulen >> 3;
+
+	for (size_t thread = 0; thread < throughput && !r; ++thread) {
+		uint64_t hash[4];
+
+		for (size_t i = 0; i < 4; ++i) {
+			size_t index = i * throughput + thread;
+
+			if (index >= gpulen64) {
+				goto c;
+			}
+
+			memcpy(hash + i, hash_gpu + index, sizeof(hash[0]));
+		}
+		
+		if (!memcmp(hash_cpu, hash, sizeof(hash))) {
+			r = true;
+			break;
+		}
+c:
+	}
+
+	if (r)
+		applog(LOG_INFO, "%s", "GPU/CPU hash test succeeded");
+	else
+		applog(LOG_ERR, "%s", "differences in hashes");
+
+	free(hash_gpu);
+
+	return r;
 }
 
 // cleanup

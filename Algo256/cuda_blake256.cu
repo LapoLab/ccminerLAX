@@ -566,18 +566,27 @@ __global__ __launch_bounds__(256, 3)
 void blake256_gpu_hash_80(const uint32_t threads, const uint32_t startNonce, uint64_t * Hash)
 {
 	uint32_t thread = (blockDim.x * blockIdx.x + threadIdx.x);
+
 	if (thread < threads)
 	{
+		//printf("Thread: %u\n", thread);
+
 		uint32_t h[8];
 		uint32_t input[4];
 
 		#pragma unroll
 		for (int i = 0; i < 8; i++) h[i] = cpu_h[i];
 
+		/*
 		#pragma unroll
 		for (int i = 0; i < 3; ++i) input[i] = c_data[i];
 
 		input[3] = startNonce + thread;
+		*/
+
+		#pragma unroll
+		for (int i = 0; i < 4; ++i) input[i] = c_data[i];
+
 		blake256_compress2nd(h, input, 640);
 
 		#pragma unroll
