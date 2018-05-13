@@ -1,3 +1,5 @@
+#include "uint256.h"
+
 extern "C" {
 #include <sph/sph_blake.h>
 #include "Lyra2Z.h"
@@ -59,8 +61,12 @@ extern "C" void lyra2Z_hash_112(void *state, const void *input)
 static bool init[MAX_GPUS] = { 0 };
 static __thread uint32_t throughput = 0;
 static __thread bool gtx750ti = false;
+static __thread size_t d_matrix_size = 0;
 
-#define d_hash_size_bytes ((size_t)32 * throughput)
+static size_t d_hash_size_bytes() 
+{ 
+	return (size_t)32 * throughput; 
+}
 
 static void maybe_init_thread_data(int thr_id, int dev_id, uint32_t max_nonce, uint32_t first_nonce)
 {
@@ -91,13 +97,14 @@ static void maybe_init_thread_data(int thr_id, int dev_id, uint32_t max_nonce, u
 	if (device_sm[dev_id] >= 350)
 	{
 		size_t matrix_sz = device_sm[dev_id] > 500 ? sizeof(uint64_t) * 4 * 4 : sizeof(uint64_t) * 8 * 8 * 3 * 4;
+		d_matrix_size = matrix_sz;
 		CUDA_SAFE_CALL(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
 		lyra2Z_cpu_init(thr_id, throughput, d_matrix[thr_id]);
 	}
 	else
 		lyra2Z_cpu_init_sm2(thr_id, throughput);
 
-	CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes));
+	CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes()));
 
 	init[thr_id] = true;
 }
@@ -139,13 +146,14 @@ extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce
 		if (device_sm[dev_id] >= 350)
 		{
 			size_t matrix_sz = device_sm[dev_id] > 500 ? sizeof(uint64_t) * 4 * 4 : sizeof(uint64_t) * 8 * 8 * 3 * 4;
+			d_matrix_size = matrix_sz;
 			CUDA_SAFE_CALL(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
 			lyra2Z_cpu_init(thr_id, throughput, d_matrix[thr_id]);
 		}
 		else
 			lyra2Z_cpu_init_sm2(thr_id, throughput);
 
-		CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes));
+		CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes()));
 
 		init[thr_id] = true;
 	}
@@ -247,13 +255,14 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 		if (device_sm[dev_id] >= 350)
 		{
 			size_t matrix_sz = device_sm[dev_id] > 500 ? sizeof(uint64_t) * 4 * 4 : sizeof(uint64_t) * 8 * 8 * 3 * 4;
+			d_matrix_size = matrix_sz;
 			CUDA_SAFE_CALL(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
 			lyra2Z_cpu_init(thr_id, throughput, d_matrix[thr_id]);
 		}
 		else
 			lyra2Z_cpu_init_sm2(thr_id, throughput);
 
-		CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes));
+		CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes()));
 
 		init[thr_id] = true;
 	}
@@ -319,87 +328,6 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	return 0;
 }
 
-// ONLY used for unit tests
-extern "C" int lyra2Z_copy_d_hash(int thr_id, uint64_t **dest)
-{
-	if (!dest)
-		return false;
-
-	if (!init[thr_id])
-		return false;
-
-	size_t sz = d_hash_size_bytes;
-
-	*dest = (uint64_t *) malloc(sz);
-	if (!(*dest))
-		return false;
-	
-	memset(*dest, 0, sz);
-
-	CUDA_SAFE_CALL(cudaMemcpy(*dest, d_hash[thr_id], sz, cudaMemcpyDeviceToHost));
-
-	return true;
-}
-
-
-extern "C" int lyra2Z_test_blake_80(int thr_id, uint32_t *block_data)
-{
-	// NOTE! try test comparing only blake hash, and move onto lyra after you've verified they're correct.
-
-	uint8_t hash_cpu[32];
-
-	block_data[19] = 0;
-
-	maybe_init_thread_data(thr_id, 0, UINT32_MAX, /*block_data[19]*/ 0);
-
-	blake256hash(hash_cpu, block_data, 14);
-	//lyra2Z_hash(hash_cpu, block_data);
-
-	blake256_cpu_setBlock_80(block_data);
-	blake256_cpu_hash_80(thr_id, throughput, /*block_data[19]*/ 0, d_hash[thr_id], 0);
-	//lyra2Z_cpu_hash_32(thr_id, throughput, block_data[19], d_hash[thr_id], gtx750ti);
-
-	uint64_t *hash_gpu;
-	
-
-	if (!lyra2Z_copy_d_hash(thr_id, &hash_gpu))
-		return false;
-
-	int r = false;
-
-	size_t gpulen = d_hash_size_bytes;
-	size_t gpulen64 = gpulen >> 3;
-
-	for (size_t thread = 0; thread < throughput && !r; ++thread) {
-		uint64_t hash[4];
-
-		for (size_t i = 0; i < 4; ++i) {
-			size_t index = i * throughput + thread;
-
-			if (index >= gpulen64) {
-				goto c;
-			}
-
-			memcpy(hash + i, hash_gpu + index, sizeof(hash[0]));
-		}
-		
-		if (!memcmp(hash_cpu, hash, sizeof(hash))) {
-			r = true;
-			break;
-		}
-c:
-	}
-
-	if (r)
-		applog(LOG_INFO, "%s", "GPU/CPU hash test succeeded");
-	else
-		applog(LOG_ERR, "%s", "differences in hashes");
-
-	free(hash_gpu);
-
-	return r;
-}
-
 // cleanup
 extern "C" void free_lyra2Z(int thr_id)
 {
@@ -418,3 +346,239 @@ extern "C" void free_lyra2Z(int thr_id)
 
 	cudaDeviceSynchronize();
 }
+
+/* UNIT TESTING */
+
+#define COPY_D_PRETEST		\
+	if (!dest)				\
+		return false;		\
+	if (!len)				\
+		return false;		\
+	if (!init[thr_id])		\
+		return false
+
+#define COPY_D_ALLOC_DEST(sz)			\
+	*dest = (uint64_t *) malloc(sz);	\
+	if (!(*dest))						\
+		return false;					\
+	memset(*dest, 0, sz)
+
+static int lyra2Z_copy_d_hash(int thr_id, uint64_t **dest, size_t *len)
+{
+	COPY_D_PRETEST;
+
+	size_t sz = d_hash_size_bytes();
+	*len = sz >> 3;
+	
+	COPY_D_ALLOC_DEST(sz);
+	CUDA_SAFE_CALL(cudaMemcpy(*dest, d_hash[thr_id], sz, cudaMemcpyDeviceToHost));
+
+	return true;
+}
+
+static int lyra2Z_copy_d_matrix(int thr_id, uint64_t **dest, size_t *len)
+{
+ 	COPY_D_PRETEST;
+
+	size_t sz = throughput * d_matrix_size;
+	*len = sz >> 3;
+
+	COPY_D_ALLOC_DEST(sz);
+	CUDA_SAFE_CALL(cudaMemcpy(*dest, d_matrix[thr_id], sz, cudaMemcpyDeviceToHost));
+    /*                                               
+	cudaError_t err = cudaMemcpy(*dest, d_hash[thr_id], sz, cudaMemcpyDeviceToHost);                                           
+	if (cudaSuccess != err) {                                         
+		fprintf(stderr, "Cuda error in func '%s' at line %i : %s.\n", 
+		         __FUNCTION__, __LINE__, cudaGetErrorString(err) );   
+		exit(EXIT_FAILURE);                                           
+	} 
+	*/
+
+
+	return true;
+}
+
+
+/*	note that the pure CPU variant of Lyra2Z will 
+	automatically blake256 the input before running
+	its algorithm; the GPU version naturally just
+	grabs the data from where the most recent GPU blake256
+	results were written */
+
+static void lyra2Z_blake_80_pre_test(int thr_id, uint32_t *block_data, uint32_t *endiandata)
+{
+	blake256_cpu_setBlock_80(endiandata);
+	blake256_cpu_hash_80(thr_id, throughput, block_data[19], d_hash[thr_id], 0);
+}
+
+static void lyra2Z_blake_80_cpu_hash_test(uint8_t *out_hash_cpu, uint32_t *thread_block_data_cpu)
+{
+	blake256hash(out_hash_cpu, thread_block_data_cpu, 14);
+}
+
+static bool lyr2aZ_blake_80_read_gpu_hash(size_t thread, size_t gpulen64, uint64_t *hash_gpu, uint64_t *hash)
+{
+	for (size_t i = 0; i < 4; ++i) {
+		size_t index = i * throughput + thread;
+
+		if (index >= gpulen64) {
+			return false;
+		}
+
+		memcpy(hash + i, hash_gpu + index, sizeof(hash[0]));
+	}
+
+	return true;
+}
+
+static void lyra2Z_lyra_80_cpu_hash_test(uint8_t *out_hash_cpu, uint32_t *thread_block_data_cpu)
+{
+	lyra2Z_hash(out_hash_cpu, thread_block_data_cpu);
+}
+
+static void lyra2Z_lyra_80_pre_test(int thr_id, uint32_t *block_data, uint32_t *endiandata)
+{
+	uint256 target = uint256().SetCompact(block_data[18]);
+	lyra2Z_setTarget(target.begin());
+	lyra2Z_cpu_hash_32(thr_id, throughput, block_data[19], d_hash[thr_id], gtx750ti);
+}
+
+static bool lyra2Z_lyra_80_read_gpu_hash(size_t thread, size_t gpulen64, uint64_t *hash_gpu, uint64_t *hash)
+{
+	for (size_t i = 0; i < 4; ++i) {
+
+		/* if this goes out of bounds, something's wrong: 
+		   even though we only need the first matrix for verification, 
+		   the algorithm is designed to run in groups of 
+		   4 matrices each. */
+
+		size_t index_test = i * throughput + thread;
+		if (index_test >= gpulen64) {
+			return false;
+		}
+	}
+
+	memcpy(hash, hash_gpu + thread, 32);
+
+	return true;
+}
+
+typedef void (*cpu_hash_test_fn_t)(uint8_t *out_hash_cpu, uint32_t *thread_block_data_cpu);
+typedef void (*gpu_pre_test_fn_t)(int thr_id, uint32_t *block_data, uint32_t *endiandata);
+typedef int (*copy_gpu_data_fn_t)(int thr_id, uint64_t **dest, size_t *gpulen);
+typedef bool (*read_gpu_hash_fn_t)(size_t thread, size_t gpulen64, uint64_t *hash_gpu, uint64_t *hash);
+
+static const char *test_names[] = {
+	"lyra2Z_blake_80_test",
+	"lyra2Z_lyra_80_test"
+};
+
+
+template <
+	int test_name_index,
+	cpu_hash_test_fn_t cpu_hash_test_fn, 
+	gpu_pre_test_fn_t gpu_pretest_fn,
+	copy_gpu_data_fn_t get_gpu_data,
+	read_gpu_hash_fn_t read_gpu_hash
+>
+static bool lyra2Z_hash_test(int thr_id, uint32_t *block_data, uint32_t *endiandata)
+{
+	static const char* err[3] = {
+		"gpu thread index out of bounds",
+		"hash difference found",
+		"could not copy gpu hash memory to host"
+	};
+
+	const volatile int name_index = test_name_index; (void) name_index; // debug 
+
+	int err_index = -1;
+
+	gpu_pretest_fn(thr_id, block_data, endiandata);
+
+	uint64_t *hash_gpu = nullptr;
+	
+	size_t gpulen64 = 0;
+
+	if (!get_gpu_data(thr_id, &hash_gpu, &gpulen64)) {
+		err_index = 2;
+		goto fail;
+	}
+
+	for (size_t thread = 0; thread < throughput; ++thread) {
+		uint32_t thread_block_data_cpu[20];
+
+		memcpy(&thread_block_data_cpu[0], &block_data[0], sizeof(thread_block_data_cpu));
+		be32enc(&thread_block_data_cpu[19], block_data[19] + thread);
+
+		uint8_t hash_cpu[32];
+
+		cpu_hash_test_fn(hash_cpu, thread_block_data_cpu);
+
+		uint64_t hash[4];
+		if (!read_gpu_hash(thread, gpulen64, hash_gpu, hash)) {
+			err_index = 0;
+			goto fail;
+		}
+		
+		if (memcmp(hash_cpu, hash, sizeof(hash)) != 0) {
+			err_index = 1;
+			goto fail;
+		}
+	}
+		
+	applog(LOG_INFO, "[%s] GPU/CPU hash test succeeded", test_names[test_name_index]);
+	free(hash_gpu);
+	return true;
+
+fail:
+	applog(LOG_ERR, "[%s] hash failure %s", err[err_index], test_names[test_name_index]);
+	if (hash_gpu)
+		free(hash_gpu);
+	return false;
+}
+
+static bool lyra2Z_blake_test_80(int thr_id, uint32_t *block_data, uint32_t *endiandata)
+{
+	return lyra2Z_hash_test<
+		0, 
+		lyra2Z_blake_80_cpu_hash_test, 
+		lyra2Z_blake_80_pre_test,
+		lyra2Z_copy_d_hash,
+		lyr2aZ_blake_80_read_gpu_hash
+	>(
+		thr_id, block_data, endiandata);
+}
+
+static bool lyra2Z_lyra_test_80(int thr_id, uint32_t *block_data, uint32_t *endiandata)
+{
+	return lyra2Z_hash_test<
+		1, 
+		lyra2Z_lyra_80_cpu_hash_test, 
+		lyra2Z_lyra_80_pre_test,
+		lyra2Z_copy_d_matrix,
+		lyra2Z_lyra_80_read_gpu_hash
+	>(
+		thr_id, block_data, endiandata);
+}
+
+extern "C" int lyra2Z_test_blake_80(int thr_id, uint32_t *block_data)
+{
+	block_data[19] = 0;
+
+	maybe_init_thread_data(thr_id, 0, UINT32_MAX, block_data[19]);
+
+	uint32_t endiandata[20];
+
+	for (int k=0; k < 20; k++)
+		be32enc(&endiandata[k], block_data[k]);
+	
+	if (!lyra2Z_blake_test_80(thr_id, block_data, endiandata))
+		return false;
+
+	if (!lyra2Z_lyra_test_80(thr_id, block_data, endiandata))
+		return false;
+
+	return true;
+}
+
+

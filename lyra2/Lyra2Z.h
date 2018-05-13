@@ -21,7 +21,6 @@
 #define LYRA2Z_H_
 
 #include <stdint.h>
-
 typedef unsigned char byte;
 
 //Block length required so Blake2's Initialization Vector (IV) is not overwritten (THIS SHOULD NOT BE MODIFIED)
@@ -37,14 +36,4 @@ typedef unsigned char byte;
 #endif
 
 int LYRA2Z(void *K, int64_t kLen, const void *pwd, int32_t pwdlen, const void *salt, int32_t saltlen, int64_t timeCost, const int16_t nRows, const int16_t nCols);
-
-// defined in Lyra2Z.cu
-// **dest is a pointer to a nullptr which will be
-// dynamically allocated and thus should be free'd
-// by the caller when finished.
-// false is returned in case of OOM or if thread hasn't
-// been initialized yet. Used only for testing
-// at the time of this writing.
-extern int lyra2Z_copy_d_hash(int thr_id, uint64_t **dest);
-
 #endif /* LYRA2_H_ */
