@@ -577,15 +577,10 @@ void blake256_gpu_hash_80(const uint32_t threads, const uint32_t startNonce, uin
 		#pragma unroll
 		for (int i = 0; i < 8; i++) h[i] = cpu_h[i];
 
-		/*
 		#pragma unroll
 		for (int i = 0; i < 3; ++i) input[i] = c_data[i];
 
 		input[3] = startNonce + thread;
-		*/
-
-		#pragma unroll
-		for (int i = 0; i < 4; ++i) input[i] = c_data[i];
 
 		blake256_compress2nd(h, input, 640);
 
