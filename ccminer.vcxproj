@@ -242,9 +242,11 @@
     <ClCompile Include="equi\equi-stratum.cpp" />
     <ClCompile Include="equi\equi.cpp" />
     <ClCompile Include="equi\equihash.cpp" />
+    <ClCompile Include="lyra2\Lyra2Zz.cpp" />
     <ClCompile Include="nvapi.cpp" />
     <ClCompile Include="nvsettings.cpp" />
     <ClCompile Include="pools.cpp" />
+    <ClCompile Include="uint256.cpp" />
     <ClCompile Include="util.cpp" />
     <ClCompile Include="bench.cpp" />
     <ClCompile Include="bignum.cpp" />
@@ -264,6 +266,7 @@
     <ClCompile Include="lyra2\Lyra2Z.c" />
     <ClInclude Include="equi\eqcuda.hpp" />
     <ClInclude Include="equi\equihash.h" />
+    <ClInclude Include="lyra2\Lyra2Zz.h" />
     <ClInclude Include="neoscrypt\neoscrypt.h" />
     <ClCompile Include="neoscrypt\neoscrypt.cpp" />
     <ClCompile Include="neoscrypt\neoscrypt-cpu.c" />
