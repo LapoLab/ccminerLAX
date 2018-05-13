@@ -6,19 +6,18 @@
 #define LYRA2ZZ_BLOCK_HEADER_LEN_BYTES 112
 #define LYRA2ZZ_BLOCK_HEADER_NONCE_OFFSET 19 /* 19 * 4 bytes */
 
-#define LYRA2ZZ_BLOCK_HEADER_DATA_LEN 32
-#define LYRA2ZZ_BLOCK_HEADER_ACCUM_CHECKPOINT_BYTES 32
+#define LYRA2ZZ_BLOCK_HEADER_UINT32_LEN 32
 
 #define LYRA2ZZ_LOG_HEADER __func__ " lyra2zz - "
 
 typedef uint32_t uint256_32_t[8];
 
-/* Assumes that accum_e */
 typedef struct lyra2zz_block_header {
 	uint256_32_t block_hash;
+	uint256_32_t target_decoded;
 	uint32_t min_nonce;
 	uint32_t max_nonce;
-	uint32_t data[LYRA2ZZ_BLOCK_HEADER_DATA_LEN];
+	uint32_t data[LYRA2ZZ_BLOCK_HEADER_UINT32_LEN];
 } lyra2zz_block_header_t;
 
 class uint256;

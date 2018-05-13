@@ -293,6 +293,10 @@ lyra2zz_block_header_t lyra2Zz_make_header(
 	ret.data[28] = 0x80000000;
 	ret.data[31] = 0x00000280;
 
+	uint256 target = uint256().SetCompact(bits);
+
+	memcpy(&ret.target_decoded[0], target.begin(), target.size()); 
+
 	return ret;
 }
 
