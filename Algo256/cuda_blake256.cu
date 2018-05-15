@@ -569,8 +569,6 @@ void blake256_gpu_hash_80(const uint32_t threads, const uint32_t startNonce, uin
 
 	if (thread < threads)
 	{
-		//printf("Thread: %u\n", thread);
-
 		uint32_t h[8];
 		uint32_t input[4];
 
