@@ -386,16 +386,6 @@ static int lyra2Z_copy_d_matrix(int thr_id, uint64_t **dest, size_t *len)
 
 	COPY_D_ALLOC_DEST(sz);
 	CUDA_SAFE_CALL(cudaMemcpy(*dest, d_matrix[thr_id], sz, cudaMemcpyDeviceToHost));
-    /*                                               
-	cudaError_t err = cudaMemcpy(*dest, d_hash[thr_id], sz, cudaMemcpyDeviceToHost);                                           
-	if (cudaSuccess != err) {                                         
-		fprintf(stderr, "Cuda error in func '%s' at line %i : %s.\n", 
-		         __FUNCTION__, __LINE__, cudaGetErrorString(err) );   
-		exit(EXIT_FAILURE);                                           
-	} 
-	*/
-
-
 	return true;
 }
 
@@ -408,7 +398,7 @@ static int lyra2Z_copy_d_matrix(int thr_id, uint64_t **dest, size_t *len)
 
 static void lyra2Z_blake_80_pre_test(int thr_id, uint32_t *block_data, uint32_t *endiandata)
 {
-	blake256_cpu_setBlock_80(endiandata);
+	blake256_cpu_setBlock_80(block_data);
 	blake256_cpu_hash_80(thr_id, throughput, block_data[19], d_hash[thr_id], 0);
 }
 
@@ -446,20 +436,7 @@ static void lyra2Z_lyra_80_pre_test(int thr_id, uint32_t *block_data, uint32_t *
 
 static bool lyra2Z_lyra_80_read_gpu_hash(size_t thread, size_t gpulen64, uint64_t *hash_gpu, uint64_t *hash)
 {
-	for (size_t i = 0; i < 4; ++i) {
-
-		/* if this goes out of bounds, something's wrong: 
-		   even though we only need the first matrix for verification, 
-		   the algorithm is designed to run in groups of 
-		   4 matrices each. */
-
-		size_t index_test = i * throughput + thread;
-		if (index_test >= gpulen64) {
-			return false;
-		}
-	}
-
-	memcpy(hash, hash_gpu + thread, 32);
+	memcpy(hash, hash_gpu + (0 * throughput + thread) * 4, 32);
 
 	return true;
 }
@@ -473,7 +450,6 @@ static const char *test_names[] = {
 	"lyra2Z_blake_80_test",
 	"lyra2Z_lyra_80_test"
 };
-
 
 template <
 	int test_name_index,
@@ -508,7 +484,9 @@ static bool lyra2Z_hash_test(int thr_id, uint32_t *block_data, uint32_t *endiand
 	for (size_t thread = 0; thread < throughput; ++thread) {
 		uint32_t thread_block_data_cpu[20];
 
-		memcpy(&thread_block_data_cpu[0], &block_data[0], sizeof(thread_block_data_cpu));
+		for (size_t i = 0; i < 20; ++i)
+			be32enc(&thread_block_data_cpu[i], block_data[i]);
+
 		be32enc(&thread_block_data_cpu[19], block_data[19] + thread);
 
 		uint8_t hash_cpu[32];
