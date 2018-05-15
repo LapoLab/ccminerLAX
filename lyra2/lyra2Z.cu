@@ -298,7 +298,8 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 				if (work->nonces[1] != UINT32_MAX)
 				{
 					be32enc(&endiandata[19], work->nonces[1]);
-					lyra2Z_hash(vhash, endiandata);
+					lyra2Z_hash_112(vhash, endiandata);
+
 					if (vhash[7] <= ptarget[7] && fulltest(vhash, ptarget)) {
 						bn_set_target_ratio(work, vhash, 1);
 						work->valid_nonces++;
