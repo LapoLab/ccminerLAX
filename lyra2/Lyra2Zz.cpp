@@ -341,9 +341,6 @@ int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 			accum
 		);
 
-		if (!lyra2Z_test_blake_80(0, header->data))
-			return false;
-
 		l2zz_print_info(header, merkle_root, prev_block_hash, accum);
 	}
 
