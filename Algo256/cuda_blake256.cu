@@ -33,9 +33,7 @@ static __device__ uint64_t cuda_swab32ll(uint64_t x) {
 
 __constant__ static uint32_t c_data[3 + 1];
 
-/*__constant__ static uint32_t c_data_112[7 + 1];*/
-
-__constant__ static uint32_t c_data_112[12]; 
+__constant__ static uint32_t c_data_112[7 + 1];
 
 __constant__ static uint32_t sigma[16][16];
 static uint32_t  c_sigma[16][16] = {
@@ -143,21 +141,11 @@ __device__ __constant__ static const uint32_t  c_Padding[16] = {
 	0, 1, 0, 640,
 };
 
-
-/*
 __device__ __constant__ static const uint32_t  c_Padding_112[16] = {
 	0, 0, 0, 0,
 	0x80000000, 0, 0, 0,
 	0, 0, 0, 0,
 	0, 1, 0, 640,
-};
-*/
-
-__device__ __constant__ static const uint32_t  c_Padding_112[16] = {
-	0, 0, 0, 0,
-	0, 0, 0, 0,	
-	0, 0, 0, 0,
-	0x80000000, 0x10000000, 0x00000000, 0x380 /* <-- last int is T0 on the 2nd compression pass */
 };
 
 __host__ __forceinline__
@@ -263,17 +251,9 @@ static void blake256_compress2nd_112(uint32_t *h, const uint32_t *block, const u
 	m[1] = block[1];
 	m[2] = block[2];
 	m[3] = block[3];
-	m[4] = block[4];
-	m[5] = block[5];
-	m[6] = block[6];
-	m[7] = block[7];
-	m[8] = block[8];
-	m[9] = block[9];
-	m[10] = block[10];
-	m[11] = block[11];
-	
+
 	#pragma unroll
-	for (int i = 12; i < 16; i++) {
+	for (int i = 4; i < 16; i++) {
 		m[i] = c_Padding_112[i];
 	}
 
@@ -622,12 +602,7 @@ void blake256_gpu_hash_112(const uint32_t threads, const uint32_t startNonce, ui
 
 		input[3] = startNonce + thread;
 
-		#pragma unroll
-		for (int i = 4; i < 8; ++i) input[i] = c_data_112[i];
-
-		//blake256_compress2nd_112(h, input, 640);
-
-		blake256_compress2nd_112(h, input, 896); // T0 in CPU equivalent holds 0x380 = 896 on the second pass for 112 bytes.
+		blake256_compress2nd_112(h, input, 640);
 
 		#pragma unroll
 		for (int i = 0; i<4; i++) {
