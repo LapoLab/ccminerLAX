@@ -1167,6 +1167,7 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 		if (!lyra2Zz_read_getblocktemplate(val, &header))
 			return false;
 
+		memcpy(&work->target[0], &header.target_decoded[0], sizeof(header.target_decoded));
 		memcpy(&work->data[0], &header.data[0], sizeof(header.data));
 	}
 
