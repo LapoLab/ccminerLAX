@@ -1085,6 +1085,9 @@ static bool submit_upstream_work(CURL *curl, struct work *work)
 		else if (opt_algo == ALGO_SIA) {
 			return sia_submit(curl, pool, work);
 		}
+		else if (opt_algo == ALGO_LYRA2ZZ) {
+			return lyra2Zz_submit(curl, pool, work);
+		}
 
 		if (opt_algo != ALGO_HEAVY && opt_algo != ALGO_MJOLLNIR) {
 			for (int i = 0; i < adata_sz; i++)

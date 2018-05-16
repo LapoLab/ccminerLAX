@@ -28,6 +28,8 @@ struct json_t;
    source file gets overriden by the macro definition. */
 int lyra2Zz_read_getblocktemplate(const json_t* blocktemplate, lyra2zz_block_header_t *out_header);
 
+int lyra2Zz_submit(CURL* curl, struct pool_infos *pools, struct work *work);
+
 lyra2zz_block_header_t lyra2Zz_make_header(
 		int32_t version,
 		const uint256& prev_block,

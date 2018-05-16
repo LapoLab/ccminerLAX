@@ -300,6 +300,34 @@ lyra2zz_block_header_t lyra2Zz_make_header(
 	return ret;
 }
 
+int lyra2Zz_submit(CURL* curl, struct pool_infos *pools, struct work *work)
+{
+	char *str = bin2hex((uchar*)work->data, data_size);
+
+	if (unlikely(!str)) {
+		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "OOM");
+		free(str);
+		return false;
+	}
+
+	/* build JSON-RPC request */
+
+	sprintf(s,
+		"{\"method\": \"submitblock\", \"params\": [\"%s\"], \"id\":10}\r\n",
+		str);
+
+	/* issue JSON-RPC request */
+	val = json_rpc_call_pool(curl, pool, s, false, false, NULL);
+	if (unlikely(!val)) {
+		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "json_rpc_call failed");
+		free(str);
+		return false;
+	}
+
+	free(str);
+	return true;
+}
+
 int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_header_t *header)
 {
 	uint256 accum, prev_block_hash, merkle_root;
