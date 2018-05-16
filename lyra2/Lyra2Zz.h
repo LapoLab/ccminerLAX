@@ -2,6 +2,7 @@
 #define LYRA2ZZ_H_
 
 #include <stdint.h>
+#include "curl\curl.h"
 
 #define LYRA2ZZ_BLOCK_HEADER_LEN_BYTES 112
 #define LYRA2ZZ_BLOCK_HEADER_NONCE_OFFSET 19 /* 19 * 4 bytes */
@@ -28,7 +29,7 @@ struct json_t;
    source file gets overriden by the macro definition. */
 int lyra2Zz_read_getblocktemplate(const json_t* blocktemplate, lyra2zz_block_header_t *out_header);
 
-int lyra2Zz_submit(CURL* curl, struct pool_infos *pools, struct work *work);
+int lyra2Zz_submit(CURL *curl, struct pool_infos *pools, struct work *work);
 
 lyra2zz_block_header_t lyra2Zz_make_header(
 		int32_t version,

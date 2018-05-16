@@ -300,9 +300,9 @@ lyra2zz_block_header_t lyra2Zz_make_header(
 	return ret;
 }
 
-int lyra2Zz_submit(CURL* curl, struct pool_infos *pools, struct work *work)
+int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 {
-	char *str = bin2hex((uchar*)work->data, data_size);
+	char *str = bin2hex((uchar*)work->data, 28);
 
 	if (unlikely(!str)) {
 		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "OOM");
@@ -312,18 +312,22 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pools, struct work *work)
 
 	/* build JSON-RPC request */
 
+	char s[4096];
+	memset(s, 0, sizeof(s));
+
 	sprintf(s,
 		"{\"method\": \"submitblock\", \"params\": [\"%s\"], \"id\":10}\r\n",
 		str);
 
 	/* issue JSON-RPC request */
-	val = json_rpc_call_pool(curl, pool, s, false, false, NULL);
+	json_t *val = json_rpc_call_pool(curl, pool, s, false, false, NULL);
 	if (unlikely(!val)) {
 		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "json_rpc_call failed");
 		free(str);
 		return false;
 	}
 
+	json_decref(val);
 	free(str);
 	return true;
 }
