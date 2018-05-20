@@ -965,7 +965,7 @@ void lyra2Zz_gpu_hash_32_2_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_
 			iterator = (iterator - 1) & 7;
 		}
 
-		rowa = WarpShuffle(state[0].x, 0, 4) & 7;
+		//rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 		reduceDuplexRowV50_8_v2_l2zz(prev,iterator,rowa, state, thread, threads);
 
 		DMatrix[(0 * threads + thread)*blockDim.x + threadIdx.x] = state[0];
@@ -990,8 +990,8 @@ void lyra2Zz_gpu_hash_32_3_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_
 		state[2] = __ldg4(&((uint2x4*)DMatrix)[2 * threads + thread]);
 		state[3] = __ldg4(&((uint2x4*)DMatrix)[3 * threads + thread]);
 
-		for (int i = 0; i < 12; i++)
-			round_lyra(state);
+		//for (int i = 0; i < 12; i++)
+			//round_lyra(state);
 
 		
 		uint32_t base = (0 * threads + thread);
