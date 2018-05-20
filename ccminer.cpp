@@ -1170,8 +1170,11 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 		if (!lyra2Zz_read_getblocktemplate(val, &header))
 			return false;
 
+		work->noncerange.u32[0] = header.min_nonce;
+		work->noncerange.u32[1] = header.max_nonce;
+
 		memcpy(&work->target[0], &header.target_decoded[0], sizeof(header.target_decoded));
-		memcpy(&work->data[0], &header.data[0], sizeof(header.data));
+		memcpy(&work->data[0], &header.data[0], 28);
 	}
 
 	return true;
@@ -2323,12 +2326,14 @@ static void *miner_thread(void *userdata)
 				break;
 			case ALGO_LYRA2:
 			case ALGO_LYRA2Z:
-			case ALGO_LYRA2ZZ:
 			case ALGO_NEOSCRYPT:
 			case ALGO_SIB:
 			case ALGO_SCRYPT:
 			case ALGO_VELTOR:
 				minmax = 0x80000;
+				break;
+			case ALGO_LYRA2ZZ:
+				minmax = work.noncerange.u32[1];
 				break;
 			case ALGO_CRYPTOLIGHT:
 			case ALGO_CRYPTONIGHT:
