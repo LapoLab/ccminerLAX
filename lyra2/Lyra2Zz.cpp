@@ -5,7 +5,7 @@
 #include "Lyra2Z.h"
 #include <vector>
 
-extern "C" int lyra2Z_test_blake_80(int thr_id, uint32_t *block_data);
+extern "C" int lyra2Zz_test_hash(int thr_id, uint32_t *block_data);
 
 static inline std::string l2zz_gbt_get_jstring(const json_t* blocktemplate, const char* key)
 {
@@ -188,10 +188,10 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 	}
 
 no_tx:
-	applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", 
+	applog(LOG_WARNING, LYRA2ZZ_LOG_HEADER "%s", 
 			"transactions entry not found...");
 
-	return false;
+	return true;
 
 not_array:
 	applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", 
@@ -200,10 +200,10 @@ not_array:
 	return false;
 
 no_entries:
-	applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", 
+	applog(LOG_WARNING, LYRA2ZZ_LOG_HEADER "%s", 
 		"no entries in transactions array");
 		
-	return false;
+	return true;
 
 not_string:
 	applog(
@@ -272,7 +272,8 @@ lyra2zz_block_header_t lyra2Zz_make_header(
 		uint32_t time,
 		uint32_t bits,
 		uint64_t noncerange,
-		const uint256& accum_checkpoint)
+		const uint256& accum_checkpoint,
+		const uint256& target)
 {
 	lyra2zz_block_header_t ret;
 
@@ -293,7 +294,7 @@ lyra2zz_block_header_t lyra2Zz_make_header(
 	ret.data[28] = 0x80000000;
 	ret.data[31] = 0x00000280;
 
-	uint256 target = uint256().SetCompact(bits);
+	//uint256 target2 = uint256().SetCompact(bits);
 
 	memcpy(&ret.target_decoded[0], target.begin(), target.size()); 
 
@@ -334,10 +335,13 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 
 int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_header_t *header)
 {
-	uint256 accum, prev_block_hash, merkle_root;
+	uint256 accum, prev_block_hash, merkle_root, target;
 	uint64_t noncerange;
 	int32_t version;
 	uint32_t bits, time;
+
+	if (!l2zz_gbt_get_uint256(blocktemplate, "target", target))
+		return false;
 
 	if (!l2zz_gbt_get_uint256(blocktemplate, "accumulatorcheckpoint", accum)) 
 		return false;
@@ -359,8 +363,18 @@ int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 
 	be32enc(&bits, bits);
 
+	
+	uint256 t2;
+	t2 = t2.SetCompact(bits);
+
+	if (target != t2) {
+		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "mismatch between bits and target after bits has been expanded");
+		return false;
+	}
+
 	if (!l2zz_gbt_calc_merkle_root(blocktemplate, merkle_root)) 
 		return false;
+
 
 	if (header) {
 		*header = lyra2Zz_make_header(
@@ -370,8 +384,11 @@ int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 			time, 
 			bits, 
 			noncerange,
-			accum
+			accum,
+			target
 		);
+
+		lyra2Zz_test_hash(0, header->data);
 
 		l2zz_print_info(header, merkle_root, prev_block_hash, accum);
 	}
