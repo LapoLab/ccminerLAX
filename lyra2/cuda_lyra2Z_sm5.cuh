@@ -811,9 +811,211 @@ void lyra2Z_gpu_hash_32_3_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_h
 	}
 }
 
+static __device__ __forceinline__
+void reduceDuplexRowV50_8_v2_l2zz(const int rowIn, const int rowOut,const int rowInOut, uint2 state[4], const uint32_t thread, const uint32_t threads)
+{
+	const uint32_t ps2 = (memshift * Ncol * rowInOut *threads + thread)*blockDim.x + threadIdx.x;
+
+	uint2 state1[3];
+
+	#pragma unroll
+	for (int j = 0; j < 3; ++j) {
+		state1[j] = *(DMatrix + ps2 + j * threads * blockDim.x);
+	}
+
+	#pragma unroll
+	for (int j = 0; j < 3; j++) {
+		state[j] ^= state1[j];
+	}
+	
+
+	for (int i = 0; i < 12; ++i) {
+		round_lyra(state);
+	}
+}
+
+__global__ __launch_bounds__(64, 1)
+void lyra2Zz_gpu_hash_32_1_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_hash)
+{
+	const uint32_t thread = (blockDim.x * blockIdx.x + threadIdx.x);
+
+	const uint2x4 blake2b_IV[2] = {
+		{ { 0xf3bcc908, 0x6a09e667 }, { 0x84caa73b, 0xbb67ae85 }, { 0xfe94f82b, 0x3c6ef372 }, { 0x5f1d36f1, 0xa54ff53a } },
+		{ { 0xade682d1, 0x510e527f }, { 0x2b3e6c1f, 0x9b05688c }, { 0xfb41bd6b, 0x1f83d9ab }, { 0x137e2179, 0x5be0cd19 } }
+	};
+	const uint2x4 Mask[2] = {
+		0x00000020UL, 0x00000000UL, 0x00000020UL, 0x00000000UL,
+		0x00000020UL, 0x00000000UL, 0x00000008UL, 0x00000000UL,
+		0x00000008UL, 0x00000000UL, 0x00000008UL, 0x00000000UL,
+		0x00000080UL, 0x00000000UL, 0x00000000UL, 0x01000000UL
+	};
+	if (thread < threads)
+	{
+		uint2x4 state[4];
+
+		((uint2*)state)[0] = __ldg(&g_hash[thread]);
+		((uint2*)state)[1] = __ldg(&g_hash[thread + threads]);
+		((uint2*)state)[2] = __ldg(&g_hash[thread + threads * 2]);
+		((uint2*)state)[3] = __ldg(&g_hash[thread + threads * 3]);
+
+		state[1] = state[0];
+		state[2] = blake2b_IV[0];
+		state[3] = blake2b_IV[1];
+
+		for (int i = 0; i < 12; i++)
+			round_lyra(state); //because 12 is not enough
+
+		state[0] ^= Mask[0];
+		state[1] ^= Mask[1];
+
+		for (int i = 0; i < 12; i++)
+			round_lyra(state); //because 12 is not enough
+
+		((uint2x4*)DMatrix)[0 * threads + thread] = state[0];
+		((uint2x4*)DMatrix)[1 * threads + thread] = state[1];
+		((uint2x4*)DMatrix)[2 * threads + thread] = state[2];
+		((uint2x4*)DMatrix)[3 * threads + thread] = state[3];
+	}
+
+}
+
+__global__ __launch_bounds__(TPB50, 1)
+void lyra2Zz_gpu_hash_32_2_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_hash)
+{
+	const uint32_t thread = (blockDim.y * blockIdx.x + threadIdx.y);
+
+	if (thread < threads)
+	{
+		uint2 state[4];
+
+		// T0	|	T1  |   T2	|   T3 <--- thread
+		// 0,		1,		2,		3
+		// 4,		5,		6,		7
+		// 8,		9,		10,		11
+
+		// 12,		13,		14,		15
+
+		// 4 separate state[4] entries spread across 4 separate threads
+		// per block hash/nonce. 
+		// So, 16 uint64_t/uint2 state elements spread across 4 separate threads.
+		// Elements [0, 11] go through a series of xor operations, but the last row doesn't.
+
+		// Note that each 12-element-row in the matrix is encoded into a 3x4 matrix, with each column pertaining
+		// to a thread.
+		
+		// Each group of 4 here represents a _column_ in the matrix (where as the accesses on the CPU
+		// side are more or less per-row). This is an important distinction - every third element 
+		// in the state array here is in the final row, which doesn't go through the xor processing.
+ 		state[0] = __ldg(&DMatrix[(0 * threads + thread)*blockDim.x + threadIdx.x]);
+		state[1] = __ldg(&DMatrix[(1 * threads + thread)*blockDim.x + threadIdx.x]);
+		state[2] = __ldg(&DMatrix[(2 * threads + thread)*blockDim.x + threadIdx.x]);
+		state[3] = __ldg(&DMatrix[(3 * threads + thread)*blockDim.x + threadIdx.x]);
+
+		reduceDuplexV5(state, thread, threads);
+
+		uint32_t rowa; // = WarpShuffle(state[0].x, 0, 4) & 7;
+		uint32_t prev = 7;
+		uint32_t iterator = 0;
+		for (uint32_t i = 0; i<8; i++) {
+			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
+			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
+			prev = iterator;
+			iterator = (iterator + 3) & 7;
+		}
+		for (uint32_t i = 0; i<8; i++) {
+			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
+			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
+			prev = iterator;
+			iterator = (iterator - 1) & 7;
+		}
+		for (uint32_t i = 0; i<8; i++) {
+			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
+			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
+			prev = iterator;
+			iterator = (iterator + 3) & 7;
+		}
+		for (uint32_t i = 0; i<8; i++) {
+			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
+			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
+			prev = iterator;
+			iterator = (iterator - 1) & 7;
+		}
+		for (uint32_t i = 0; i<8; i++) {
+			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
+			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
+			prev = iterator;
+			iterator = (iterator + 3) & 7;
+		}
+		for (uint32_t i = 0; i<8; i++) {
+			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
+			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
+			prev = iterator;
+			iterator = (iterator - 1) & 7;
+		}
+		for (uint32_t i = 0; i<8; i++) {
+			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
+			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
+			prev = iterator;
+			iterator = (iterator + 3) & 7;
+		}
+		for (uint32_t i = 0; i<8; i++) {
+			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
+			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
+			prev = iterator;
+			iterator = (iterator - 1) & 7;
+		}
+
+		rowa = WarpShuffle(state[0].x, 0, 4) & 7;
+		reduceDuplexRowV50_8_v2_l2zz(prev,iterator,rowa, state, thread, threads);
+
+		DMatrix[(0 * threads + thread)*blockDim.x + threadIdx.x] = state[0];
+		DMatrix[(1 * threads + thread)*blockDim.x + threadIdx.x] = state[1];
+		DMatrix[(2 * threads + thread)*blockDim.x + threadIdx.x] = state[2];
+		DMatrix[(3 * threads + thread)*blockDim.x + threadIdx.x] = state[3];
+	}
+
+}
+
+__global__ __launch_bounds__(64, 1)
+void lyra2Zz_gpu_hash_32_3_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_hash, uint32_t *resNonces)
+{
+	const uint32_t thread = (blockDim.x * blockIdx.x + threadIdx.x);
+
+	if (thread < threads)
+	{
+		uint2x4 state[4];
+
+		state[0] = __ldg4(&((uint2x4*)DMatrix)[0 * threads + thread]);
+		state[1] = __ldg4(&((uint2x4*)DMatrix)[1 * threads + thread]);
+		state[2] = __ldg4(&((uint2x4*)DMatrix)[2 * threads + thread]);
+		state[3] = __ldg4(&((uint2x4*)DMatrix)[3 * threads + thread]);
+
+		for (int i = 0; i < 12; i++)
+			round_lyra(state);
+
+		
+		uint32_t base = (0 * threads + thread);
+
+		DMatrix[base + 0] = state[0].x;
+		DMatrix[base + 1] = state[0].y;
+		DMatrix[base + 2] = state[0].z;
+		DMatrix[base + 3] = state[0].w;
+
+		uint32_t nonce = startNounce + thread;
+		if (((uint64_t*)state)[3] <= ((uint64_t*)pTarget)[3]) {
+ 			atomicMin(&resNonces[1], resNonces[0]);
+			atomicMin(&resNonces[0], nonce);
+		}
+	}
+}
+
 #else
 /* if __CUDA_ARCH__ != 500 .. host */
 __global__ void lyra2Z_gpu_hash_32_1_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_hash) {}
 __global__ void lyra2Z_gpu_hash_32_2_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_hash) {}
 __global__ void lyra2Z_gpu_hash_32_3_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_hash, uint32_t *resNonces) {}
+
+__global__ void lyra2Zz_gpu_hash_32_1_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_hash) {}
+__global__ void lyra2Zz_gpu_hash_32_2_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_hash) {}
+__global__ void lyra2Zz_gpu_hash_32_3_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_hash, uint32_t *resNonces) {}
 #endif

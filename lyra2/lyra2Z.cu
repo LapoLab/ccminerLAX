@@ -22,6 +22,7 @@ extern void lyra2Z_cpu_init(int thr_id, uint32_t threads, uint64_t *d_matrix);
 extern void lyra2Z_cpu_init_sm2(int thr_id, uint32_t threads);
 extern void lyra2Z_cpu_free(int thr_id);
 extern uint32_t lyra2Z_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNonce, uint64_t *d_outputHash, bool gtx750ti);
+extern uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNonce, uint64_t *d_outputHash, bool gtx750ti);
 
 extern void lyra2Z_setTarget(const void *ptarget);
 extern uint32_t lyra2Z_getSecNonce(int thr_id, int num);

@@ -971,3 +971,62 @@ uint32_t lyra2Z_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce, 
 
 	return result;
 }
+#endif
+
+__host__
+uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce, uint64_t *d_hash, bool gtx750ti)
+{
+	uint32_t result = UINT32_MAX;
+	cudaMemset(d_GNonces[thr_id], 0xff, 2 * sizeof(uint32_t));
+	int dev_id = device_map[thr_id % MAX_GPUS];
+
+	uint32_t tpb = TPB52;
+
+	if (device_sm[dev_id] == 500)
+		tpb = TPB50;
+	if (device_sm[dev_id] == 200)
+		tpb = TPB20;
+
+	dim3 grid1((threads * 4 + tpb - 1) / tpb);
+	dim3 block1(4, tpb >> 2);
+
+	dim3 grid2((threads + 64 - 1) / 64);
+	dim3 block2(64);
+
+	dim3 grid3((threads + tpb - 1) / tpb);
+	dim3 block3(tpb);
+
+	if (device_sm[dev_id] >= 520)
+	{
+		lyra2Z_gpu_hash_32_1 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash);
+
+		lyra2Z_gpu_hash_32_2 <<< grid1, block1, 24 * (8 - 0) * sizeof(uint2) * tpb >>> (threads, startNounce, d_hash);
+
+		lyra2Z_gpu_hash_32_3 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash, d_GNonces[thr_id]);
+	}
+	else if (device_sm[dev_id] == 500 || device_sm[dev_id] == 350)
+	{
+		size_t shared_mem = 0;
+
+		if (gtx750ti)
+			// suitable amount to adjust for 8warp
+			shared_mem = 8192;
+		else
+			// suitable amount to adjust for 10warp
+			shared_mem = 6144;
+
+		lyra2Zz_gpu_hash_32_1_sm5 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash);
+
+		lyra2Zz_gpu_hash_32_2_sm5 <<< grid1, block1, shared_mem >>> (threads, startNounce, (uint2*)d_hash);
+
+		lyra2Zz_gpu_hash_32_3_sm5 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash, d_GNonces[thr_id]);
+	}
+	else
+		lyra2Z_gpu_hash_32_sm2 <<< grid3, block3 >>> (threads, startNounce, d_hash, d_GNonces[thr_id]);
+
+	// get first found nonce
+	cudaMemcpy(h_GNonces[thr_id], d_GNonces[thr_id], 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+	result = *h_GNonces[thr_id];
+
+	return result;
+}
