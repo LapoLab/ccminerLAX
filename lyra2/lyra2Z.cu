@@ -263,10 +263,10 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 			size_t matrix_sz = device_sm[dev_id] > 500 ? sizeof(uint64_t) * 4 * 4 : sizeof(uint64_t) * 8 * 8 * 3 * 4;
 			d_matrix_size = matrix_sz;
 			CUDA_SAFE_CALL(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
-			lyra2Z_cpu_init(thr_id, throughput, d_matrix[thr_id]);
+			lyra2Zz_cpu_init(thr_id, throughput, d_matrix[thr_id]);
 		}
 		else
-			lyra2Z_cpu_init_sm2(thr_id, throughput);
+			lyra2Zz_cpu_init_sm2(thr_id, throughput);
 
 		CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes()));
 
@@ -277,7 +277,7 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 		be32enc(&endiandata[k], pdata[k]);
 
 	blake256_cpu_setBlock_112(pdata);
-	lyra2Z_setTarget(ptarget);
+	lyra2Zz_setTarget(ptarget);
 
 	do {
 		int order = 0;
@@ -286,7 +286,7 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 
 		*hashes_done = pdata[19] - first_nonce + throughput;
 
-		work->nonces[0] = lyra2Z_cpu_hash_32(thr_id, throughput, pdata[19], d_hash[thr_id], gtx750ti);
+		work->nonces[0] = lyra2Zz_cpu_hash_32(thr_id, throughput, pdata[19], d_hash[thr_id], gtx750ti);
 
 		if (work->nonces[0] != UINT32_MAX)
 		{
