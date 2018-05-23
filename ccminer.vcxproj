@@ -244,9 +244,11 @@
     <ClCompile Include="equi\equihash.cpp" />
     <ClCompile Include="lyra2\Lyra2Z.c" />
     <ClCompile Include="lyra2\Lyra2Zz.cpp" />
+    <ClCompile Include="lyra2\Sponge.c" />
     <ClCompile Include="nvapi.cpp" />
     <ClCompile Include="nvsettings.cpp" />
     <ClCompile Include="pools.cpp" />
+    <ClCompile Include="sph\groestl.c" />
     <ClCompile Include="uint256.cpp" />
     <ClCompile Include="util.cpp" />
     <ClCompile Include="bench.cpp" />
@@ -263,14 +265,16 @@
     <ClCompile Include="hefty1.c" />
     <ClCompile Include="myriadgroestl.cpp" />
     <ClCompile Include="lyra2\Lyra2.c" />
-    <ClCompile Include="lyra2\Sponge.c" />
     <ClInclude Include="equi\eqcuda.hpp" />
     <ClInclude Include="equi\equihash.h" />
+    <ClInclude Include="lyra2\cuda_lyra2Zz_sm5.cuh" />
     <ClInclude Include="lyra2\Lyra2Zz.h" />
+    <ClInclude Include="lyra2\Sponge.h" />
     <ClInclude Include="neoscrypt\neoscrypt.h" />
     <ClCompile Include="neoscrypt\neoscrypt.cpp" />
     <ClCompile Include="neoscrypt\neoscrypt-cpu.c" />
     <ClInclude Include="neoscrypt\cuda_vectors.h" />
+    <ClInclude Include="uint256.h" />
     <ClInclude Include="x11\cuda_x11_simd512_sm2.cuh" />
     <ClInclude Include="x16\cuda_x16.h" />
     <CudaCompile Include="Algo256\bmw.cu" />
@@ -303,6 +307,7 @@
       <MaxRegCount>0</MaxRegCount>
       <CodeGeneration Condition="'$(Configuration)|$(Platform)'=='Release|x64'">compute_61,sm_61;compute_52,sm_52;compute_50,sm_50;compute_30,sm_30</CodeGeneration>
     </CudaCompile>
+    <CudaCompile Include="lyra2\cuda_lyra2Zz.cu" />
     <CudaCompile Include="neoscrypt\cuda_neoscrypt.cu">
       <MaxRegCount>160</MaxRegCount>
     </CudaCompile>
@@ -318,7 +323,6 @@
     <ClCompile Include="sph\cubehash.c" />
     <ClCompile Include="sph\echo.c" />
     <ClCompile Include="sph\fugue.c" />
-    <ClCompile Include="sph\groestl.c" />
     <ClCompile Include="sph\haval.c" />
     <ClCompile Include="sph\jh.c" />
     <ClCompile Include="sph\keccak.c" />
@@ -397,9 +401,7 @@
     <ClInclude Include="sph\sph_hamsi.h" />
     <ClInclude Include="sph\sph_types.h" />
     <ClInclude Include="sph\sph_whirlpool.h" />
-    <ClInclude Include="uint256.h" />
     <ClInclude Include="lyra2\Lyra2.h" />
-    <ClInclude Include="lyra2\Sponge.h" />
     <ClInclude Include="lyra2\Lyra2Z.h" />
     <ClInclude Include="quark\groestl_transf_quad.h" />
     <ClInclude Include="quark\groestl_functions_quad.h" />
