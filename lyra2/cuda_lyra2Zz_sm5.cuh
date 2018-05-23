@@ -794,24 +794,6 @@ void lyra2Zz_gpu_hash_32_2_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_
 	{
 		uint2 state[4];
 
-		// T0	|	T1  |   T2	|   T3 <--- thread
-		// 0,		1,		2,		3
-		// 4,		5,		6,		7
-		// 8,		9,		10,		11
-
-		// 12,		13,		14,		15
-
-		// 4 separate state[4] entries spread across 4 separate threads
-		// per block hash/nonce. 
-		// So, 16 uint64_t/uint2 state elements spread across 4 separate threads.
-		// Elements [0, 11] go through a series of xor operations, but the last row doesn't.
-
-		// Note that each element in the matrix is encoded into a 3x4 matrix, with each column of that matrix pertaining
-		// to a thread. So the end result is an 8x8 matrix of 4x3 matrix elements, with each row representing a portion of a "block".
-		
-		// Each group of 4 here represents a _column_ in the matrix (where as the accesses on the CPU
-		// side are more or less per-row). This is an important distinction - every third element 
-		// in the state array here is in the final row, which doesn't go through the xor processing.
  		state[0] = __ldg(&DMatrix[(0 * threads + thread)*blockDim.x + threadIdx.x]);
 		state[1] = __ldg(&DMatrix[(1 * threads + thread)*blockDim.x + threadIdx.x]);
 		state[2] = __ldg(&DMatrix[(2 * threads + thread)*blockDim.x + threadIdx.x]);
