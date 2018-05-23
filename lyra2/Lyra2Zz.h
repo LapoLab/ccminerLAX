@@ -38,6 +38,7 @@ lyra2zz_block_header_t lyra2Zz_make_header(
 		uint32_t time,
 		uint32_t bits,
 		uint64_t noncerange,	// low bits = min, 
-		const uint256& accum_checkpoint);
+		const uint256& accum_checkpoint,
+		const uint256& target);
 
 #endif // LYRA2ZZ_H_
