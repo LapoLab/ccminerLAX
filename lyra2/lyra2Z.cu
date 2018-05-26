@@ -33,7 +33,7 @@ extern uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t start
 
 extern void lyra2Zz_setTarget(const void *ptarget);
 extern uint32_t lyra2Zz_getSecNonce(int thr_id, int num);
-
+/*
 extern "C" void lyra2Z_hash(void *state, const void *input)
 {
 	uint32_t _ALIGN(64) hashA[8], hashB[8];
@@ -63,6 +63,7 @@ extern "C" void lyra2Z_hash_112(void *state, const void *input)
 
 	memcpy(state, hashB, 32);
 }
+*/
 
 static bool init[MAX_GPUS] = { 0 };
 static __thread uint32_t throughput = 0;

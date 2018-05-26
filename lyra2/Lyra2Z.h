@@ -35,6 +35,9 @@ typedef unsigned char byte;
         #define BLOCK_LEN_BYTES (BLOCK_LEN_INT64 * 8)    //Block length, in bytes
 #endif
 
+void lyra2Z_hash(void *state, const void *input);
+void lyra2Z_hash_112(void *state, const void *input);
+
 #ifndef LYRA2Z_CPU_OLD
 int LYRA2Z(void *K, uint64_t kLen, const void *pwd, uint64_t pwdlen, const void *salt, uint64_t saltlen, uint64_t timeCost, uint64_t nRows, uint64_t nCols);
 #else

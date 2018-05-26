@@ -1,9 +1,11 @@
 #include "Lyra2Zz.h"
 #include "uint256.h"
 #include "../miner.h"
-#include "../elist.h"
-#include "Lyra2Z.h"
+extern "C" {
+	#include "Lyra2Z.h"
+}
 #include <vector>
+#include <sstream>
 
 extern "C" int lyra2Zz_test_hash(int thr_id, uint32_t *block_data);
 
@@ -100,13 +102,12 @@ typedef struct l2zz_hash {
 
 static l2zz_hash_t l2zz_double_sha(uint8_t *in, size_t len)
 {
-	l2zz_hash_t l2z1; //l2z2;
+	l2zz_hash_t l2z1, l2z2;
 
-	// lapo wallet doesn't double sha for merkle root, so we don't either.
 	sha256d(&l2z1.hash[0], in, (int) len);
-	//sha256d(&l2z2.hash[0], &l2z1.hash[0], sizeof(l2z1.hash));
+	sha256d(&l2z2.hash[0], &l2z1.hash[0], sizeof(l2z1.hash));
 
-	return l2z1;
+	return l2z2;
 }
 
 static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroot)
@@ -303,13 +304,23 @@ lyra2zz_block_header_t lyra2Zz_make_header(
 
 int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 {
-	char *str = bin2hex((uchar*)work->data, 28);
+	char *str = bin2hex((uchar*)work->data, LYRA2ZZ_BLOCK_HEADER_LEN_BYTES);
 
 	if (unlikely(!str)) {
 		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "OOM");
-		free(str);
 		return false;
 	}
+
+	/* LAPO requires a byte length prefix */
+	std::stringstream stream;
+    stream << std::hex << LYRA2ZZ_BLOCK_HEADER_LEN_BYTES;
+    std::string hex_data( stream.str() );
+	
+
+	//std::string hex_data;
+	hex_data.append(str);
+
+	free(str);
 
 	/* build JSON-RPC request */
 
@@ -318,18 +329,45 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 
 	sprintf(s,
 		"{\"method\": \"submitblock\", \"params\": [\"%s\"], \"id\":10}\r\n",
-		str);
+		hex_data.c_str());
+
+	/* log submit info to console */
+
+	if (opt_debug) {
+		uint32_t out[8];
+		/*
+		uint32_t in[28];
+
+		for (uint32_t i = 0; i < 28; ++i)
+			if (i < 27)
+				in[i + 1] = work->data[i];
+
+		in[0] = 0x70;
+		*/
+		lyra2Z_hash_112(out, work->data);
+
+		char* block_hash = bin2hex((uchar*)out, sizeof(out));
+
+		if (unlikely(!block_hash)) {
+			applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "OOM");
+			return false;
+		}
+
+		applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "Sending the following info:\n\n"
+			"Block Hash: %s\n\n"
+			"Block Hex data: %s\n\n", block_hash, s);
+
+		free(block_hash);
+	}
 
 	/* issue JSON-RPC request */
 	json_t *val = json_rpc_call_pool(curl, pool, s, false, false, NULL);
 	if (unlikely(!val)) {
 		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "json_rpc_call failed");
-		free(str);
 		return false;
 	}
 
 	json_decref(val);
-	free(str);
 	return true;
 }
 
@@ -364,17 +402,29 @@ int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 	be32enc(&bits, bits);
 
 	
+	bool_t overflow = false;
+	bool_t negative = false;
+
 	uint256 t2;
-	t2 = t2.SetCompact(bits);
+	t2 = t2.SetCompact(bits, &overflow, &negative);
 
 	if (target != t2) {
 		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "mismatch between bits and target after bits has been expanded");
 		return false;
 	}
 
+	if (overflow) {
+		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "target overflow");
+		return false;
+	}
+
+	if (negative) {
+		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "target negative");
+		return false;
+	}
+
 	if (!l2zz_gbt_calc_merkle_root(blocktemplate, merkle_root)) 
 		return false;
-
 
 	if (header) {
 		*header = lyra2Zz_make_header(
@@ -388,7 +438,8 @@ int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 			target
 		);
 
-		lyra2Zz_test_hash(0, header->data);
+		//lyra2Zz_test_hash(0, header->data);
+
 
 		l2zz_print_info(header, merkle_root, prev_block_hash, accum);
 	}

@@ -20,6 +20,8 @@
 typedef long long  int64;
 typedef unsigned long long  uint64;
 
+typedef bool bool_t; // explicit bool is sometimes necessary (compat in ccminer overrides this using #define bool)
+
 class uint_error : public std::runtime_error
 {
 public:

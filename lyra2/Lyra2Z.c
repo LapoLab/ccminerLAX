@@ -24,6 +24,38 @@
 
 #include "Lyra2Z.h"
 #include "Sponge.h"
+#include "sph\sph_blake.h"
+#include "compat.h"
+
+void lyra2Z_hash(void *state, const void *input)
+{
+	uint32_t _ALIGN(64) hashA[8], hashB[8];
+	sph_blake256_context ctx_blake;
+
+	sph_blake256_set_rounds(14);
+	sph_blake256_init(&ctx_blake);
+	sph_blake256(&ctx_blake, input, 80);
+	sph_blake256_close(&ctx_blake, hashA);
+
+	LYRA2Z(hashB, 32, hashA, 32, hashA, 32, 8, 8, 8);
+
+	memcpy(state, hashB, 32);
+}
+
+void lyra2Z_hash_112(void *state, const void *input)
+{
+	uint32_t _ALIGN(64) hashA[8], hashB[8];
+	sph_blake256_context ctx_blake;
+
+	sph_blake256_set_rounds(14);
+	sph_blake256_init(&ctx_blake);
+	sph_blake256(&ctx_blake, input, 112);
+	sph_blake256_close(&ctx_blake, hashA);
+
+	LYRA2Z(hashB, 32, hashA, 32, hashA, 32, 8, 8, 8);
+
+	memcpy(state, hashB, 32);
+}
 
 #ifndef LYRA2Z_CPU_OLD
 /**

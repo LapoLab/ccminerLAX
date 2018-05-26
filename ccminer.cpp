@@ -1174,7 +1174,7 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 		work->noncerange.u32[1] = header.max_nonce;
 
 		memcpy(&work->target[0], &header.target_decoded[0], sizeof(header.target_decoded));
-		memcpy(&work->data[0], &header.data[0], 28);
+		memcpy(&work->data[0], &header.data[0],	LYRA2ZZ_BLOCK_HEADER_LEN_BYTES);
 	}
 
 	return true;
