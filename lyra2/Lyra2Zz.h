@@ -16,6 +16,7 @@ typedef uint32_t uint256_32_t[8];
 typedef struct lyra2zz_block_header {
 	uint256_32_t block_hash;
 	uint256_32_t target_decoded;
+	uint8_t *byte_view; // points to data (used for debugging)
 	uint32_t min_nonce;
 	uint32_t max_nonce;
 	uint32_t data[LYRA2ZZ_BLOCK_HEADER_UINT32_LEN];
@@ -31,7 +32,8 @@ int lyra2Zz_read_getblocktemplate(const json_t* blocktemplate, lyra2zz_block_hea
 
 int lyra2Zz_submit(CURL *curl, struct pool_infos *pools, struct work *work);
 
-lyra2zz_block_header_t lyra2Zz_make_header(
+void lyra2Zz_make_header(
+		lyra2zz_block_header_t *ret,
 		int32_t version,
 		const uint256& prev_block,
 		const uint256& merkle_root,

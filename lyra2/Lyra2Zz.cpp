@@ -61,8 +61,30 @@ static bool l2zz_gbt_get_uint256(const json_t *blocktemplate, const char *key, u
 	return true;
 }
 
+std::string reverse_hex_string(const std::string& in)
+{
+	std::string str_hex = in;
+
+	size_t len = str_hex.size() >> 1;
+
+	for (size_t i = 0; i < len; i += 2) {
+		size_t j = str_hex.size() - i - 1;
+		
+		char tmp = str_hex[i];
+		char tmp2 = str_hex[i + 1];
+		
+		str_hex[i + 1] = str_hex[j + 0];
+		str_hex[i + 0] = str_hex[j]; 
+
+		str_hex[j - 1] = tmp;
+		str_hex[j] = tmp2;
+	}
+
+	return str_hex;
+}
+
 template <typename intType>
-static bool l2zz_get_hex_str(const json_t *blocktemplate, const char *key, intType &out)
+static bool l2zz_get_hex_str(const json_t *blocktemplate, const char *key, intType &out, bool reverse = true)
 {
 	std::string str_hex = l2zz_gbt_get_jstring(blocktemplate, key);
 	if (str_hex.empty())
@@ -72,6 +94,8 @@ static bool l2zz_get_hex_str(const json_t *blocktemplate, const char *key, intTy
 	if (str_hex.size() & 0x1)
 		str_hex = "0" + str_hex;
 
+	if (reverse)
+		str_hex = reverse_hex_string(str_hex);
 
 	if ((str_hex.size() >> 1) > sizeof(out)) {
 		applog(LOG_ERR, 
@@ -272,7 +296,8 @@ static void l2zz_print_info(lyra2zz_block_header_t *header, const uint256& merkl
 	free(a); //free(a2);
 }
 
-lyra2zz_block_header_t lyra2Zz_make_header(
+void lyra2Zz_make_header(
+		lyra2zz_block_header_t *ret,
 		int32_t version,
 		const uint256& prev_block,
 		const uint256& merkle_root,
@@ -282,28 +307,29 @@ lyra2zz_block_header_t lyra2Zz_make_header(
 		const uint256& accum_checkpoint,
 		const uint256& target)
 {
-	lyra2zz_block_header_t ret;
-
-	memset(&ret, 0, sizeof(ret));
+	memset(ret, 0, sizeof(*ret));
 	
-	ret.min_nonce = (uint32_t)(noncerange & 0xFFFFFFFF);
-	ret.max_nonce = (uint32_t)(noncerange >> 32);
+	ret->min_nonce = (uint32_t)(noncerange & 0xFFFFFFFF);
+	ret->max_nonce = (uint32_t)(noncerange >> 32);
 
-	ret.data[0] = version;
-	ret.data[17] = time;
-	ret.data[18] = bits;
-	ret.data[19] = ret.min_nonce;
+	ret->data[0] = version;
+	ret->data[17] = time;
+	ret->data[18] = bits;
+	ret->data[19] = ret->min_nonce;
 
-	memcpy(&ret.data[1], prev_block.begin(), prev_block.size());
-	memcpy(&ret.data[9], merkle_root.begin(), merkle_root.size());
-	memcpy(&ret.data[20], accum_checkpoint.begin(), accum_checkpoint.size());
+	memcpy(&ret->data[1], prev_block.begin(), prev_block.size());
+	memcpy(&ret->data[9], merkle_root.begin(), merkle_root.size());
+	memcpy(&ret->data[20], accum_checkpoint.begin(), accum_checkpoint.size());
 
-	ret.data[28] = 0x80000000;
-	ret.data[31] = 0x00000280;
+	ret->data[28] = 0x80000000;
+	ret->data[31] = 0x00000280;
 
 	//uint256 target2 = uint256().SetCompact(bits);
 
-	memcpy(&ret.target_decoded[0], target.begin(), target.size()); 
+	memcpy(&ret->target_decoded[0], target.begin(), target.size()); 
+
+	ret->byte_view = (uint8_t *)ret->data;
+}
 
 	return ret;
 }
@@ -433,7 +459,8 @@ int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 		return false;
 
 	if (header) {
-		*header = lyra2Zz_make_header(
+		lyra2Zz_make_header(
+			header,
 			version, 
 			prev_block_hash, 
 			merkle_root, 
@@ -444,8 +471,7 @@ int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 			target
 		);
 
-		//lyra2Zz_test_hash(0, header->data);
-
+		//lyra2Zz_test_hash(0, NULL);
 
 		l2zz_print_info(header, merkle_root, prev_block_hash, accum);
 	}
