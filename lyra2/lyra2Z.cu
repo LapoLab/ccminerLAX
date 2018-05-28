@@ -274,10 +274,23 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 		init[thr_id] = true;
 	}
 
-	for (int k=0; k < 28; k++)
-		be32enc(&endiandata[k], pdata[k]);
+//	for (int k=0; k < 28; k++) {
+	//	be32enc(&endiandata[k], pdata[k]);
+	//}
+	
+	//memcpy(endiandata, pdata, sizeof(endiandata));
 
-	blake256_cpu_setBlock_112(pdata);
+	memcpy(&ptarget[0], work->target, sizeof(work->target));
+
+	//blake256_cpu_setBlock_112(pdata);
+	
+	for (int k=0; k < 28; k++) {
+		be32enc(&endiandata[k], pdata[k]);
+	}
+
+	blake256_cpu_setBlock_112(endiandata);
+	memcpy(endiandata, pdata, sizeof(endiandata));
+	
 	lyra2Zz_setTarget(ptarget);
 
 	do {

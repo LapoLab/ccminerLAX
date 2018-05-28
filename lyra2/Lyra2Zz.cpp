@@ -505,11 +505,8 @@ int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 	if (!l2zz_get_hex_str(blocktemplate, "bits", bits)) 
 		return false;
 
-	if (!l2zz_get_hex_str(blocktemplate, "noncerange", noncerange)) 
+	if (!l2zz_get_hex_str(blocktemplate, "noncerange", noncerange, false)) 
 		return false;
-
-	be32enc(&bits, bits);
-
 	
 	bool_t overflow = false;
 	bool_t negative = false;
