@@ -6,6 +6,7 @@ extern "C" {
 }
 #include <vector>
 #include <sstream>
+#include <iomanip>
 
 extern "C" int lyra2Zz_test_hash(int thr_id, uint32_t *block_data);
 
@@ -331,28 +332,95 @@ void lyra2Zz_make_header(
 	ret->byte_view = (uint8_t *)ret->data;
 }
 
+typedef struct l2zz_header_helper {
+	int32_t version;
+	uint256_32_t prev_block;
+	uint256_32_t merkle_root;
+	uint32_t time;
+	uint32_t bits;
+	uint32_t nonce;
+	uint256_32_t accum_checkpoint;
+
+} l2zz_header_helper_t;
+
+static void make_u256(uint256_32_t in, uint256& out)
+{
+	std::vector<unsigned char> tmp(32);
+	memcpy(&tmp[0], &in[0], 32);
+	out = uint256(tmp);
+}
+
+static std::string get_hexb(uint8_t x)
+{
+	std::stringstream ss;
+	ss << std::setfill('0') << std::setw(2) << std::hex << (uint16_t)x;
+	return ss.str();
+}
+
+static std::string get_hex_bytes(uint32_t x)
+{
+	uint8_t *p = (uint8_t*)&x;
+	
+	std::stringstream ss;
+
+	ss << get_hexb(p[0]);
+	ss << get_hexb(p[1]);
+	ss << get_hexb(p[2]);
+	ss << get_hexb(p[3]);
+
+	std::string ret = ss.str();
+
 	return ret;
+}
+
+static std::string get_hex_bytes(uint256_32_t x)
+{
+	std::stringstream ss;
+
+	for (size_t i = 0; i < 8; ++i)
+		ss << get_hex_bytes(x[i]);
+
+	return ss.str();
 }
 
 int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 {
-	char *str = bin2hex((uchar*)work->data, LYRA2ZZ_BLOCK_HEADER_LEN_BYTES);
+	/* serialize the header data */
 
-	if (unlikely(!str)) {
-		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "OOM");
-		return false;
-	}
+	uint32_t *pdata = work->data;
 
-	/* LAPO requires a byte length prefix */
-	std::stringstream stream;
-    stream << std::hex << LYRA2ZZ_BLOCK_HEADER_LEN_BYTES;
-    std::string hex_data( stream.str() );
+	l2zz_header_helper_t *header = (l2zz_header_helper_t *)(pdata);
+
+	uint256 prev, merkle, accum;
+
+	make_u256(header->prev_block, prev);
+	make_u256(header->merkle_root, merkle);
+	make_u256(header->accum_checkpoint, accum);
+
+	uint256 target = uint256().SetCompact(header->bits);
+	std::string strtarget = target.GetHex();
+
+	std::string hex_data;
+
+	std::string str_time, str_bits, str_nonce, str_ver;
+
+	be32enc(&header->nonce, header->nonce);
+
+	str_time = get_hex_bytes(header->time);
+	str_bits = get_hex_bytes(header->bits);
+	str_nonce = get_hex_bytes(header->nonce);
+	str_ver = get_hex_bytes(header->version);
+
+	hex_data.append(str_ver);
+	hex_data.append(get_hex_bytes(header->prev_block));
+	hex_data.append(get_hex_bytes(header->merkle_root));
+	hex_data.append(str_time);
+	hex_data.append(str_bits);
+	hex_data.append(str_nonce);
+	hex_data.append(get_hex_bytes(header->accum_checkpoint));
+	hex_data.append("00"); // amount of transactions
 	
-
-	//std::string hex_data;
-	hex_data.append(str);
-
-	free(str);
+	hex_data.append("00"); // signature size
 
 	/* build JSON-RPC request */
 
@@ -363,33 +431,42 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 		"{\"method\": \"submitblock\", \"params\": [\"%s\"], \"id\":10}\r\n",
 		hex_data.c_str());
 
+	// make u256 block hash for client side tests
+	uint32_t out[8];		
+	lyra2Z_hash_112(out, pdata);
+
+	uint256 block_hash;
+	make_u256(&out[0], block_hash);
+
 	/* log submit info to console */
 
+	header = (l2zz_header_helper_t *)work->data;
+	target = uint256().SetCompact(header->bits);
+
 	if (opt_debug) {
-		uint32_t out[8];
-		/*
-		uint32_t in[28];
-
-		for (uint32_t i = 0; i < 28; ++i)
-			if (i < 27)
-				in[i + 1] = work->data[i];
-
-		in[0] = 0x70;
-		*/
-		lyra2Z_hash_112(out, work->data);
-
-		char* block_hash = bin2hex((uchar*)out, sizeof(out));
-
-		if (unlikely(!block_hash)) {
-			applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "OOM");
-			return false;
-		}
+		std::string str_block_hash = block_hash.GetHex();
+		std::string str_target = target.GetHex();
 
 		applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "Sending the following info:\n\n"
+			"HEx Char Length: %i\n\n"
 			"Block Hash: %s\n\n"
-			"Block Hex data: %s\n\n", block_hash, s);
+			"Target: %s\n\n"
+			"Block Hex data: %s\n\n", 
+			hex_data.size(), 
+			str_block_hash.c_str(),
+			str_target.c_str(),
+			s);
+	}
 
-		free(block_hash);
+	/* one final check */
+	if (target < block_hash) {
+		std::string str_block_hash = block_hash.GetHex();
+		std::string str_target = target.GetHex();
+		applog(LOG_ERR, 
+			LYRA2ZZ_LOG_HEADER "block hash %s > target %s", str_block_hash.c_str(),
+			str_target.c_str());
+
+		return false;
 	}
 
 	/* issue JSON-RPC request */
