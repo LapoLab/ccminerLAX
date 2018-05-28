@@ -75,10 +75,10 @@ std::string reverse_hex_string(const std::string& in)
 		char tmp2 = str_hex[i + 1];
 		
 		str_hex[i + 1] = str_hex[j + 0];
-		str_hex[i + 0] = str_hex[j]; 
+		str_hex[i + 0] = str_hex[j - 1]; 
 
 		str_hex[j - 1] = tmp;
-		str_hex[j] = tmp2;
+		str_hex[j + 0] = tmp2;
 	}
 
 	return str_hex;
