@@ -7,6 +7,24 @@ extern "C" {
 #include <vector>
 #include <sstream>
 #include <iomanip>
+#include <memory>
+
+typedef uint8_t sha256_t[32];
+
+typedef struct l2zz_hash {
+	sha256_t hash;
+} l2zz_hash_t;
+
+class l2zz_internal_data {
+public:
+	std::vector<std::vector<uint8_t>> transactions;
+
+	void reset(void) {
+		transactions.clear();
+	}
+};
+
+static std::unique_ptr<l2zz_internal_data> g_internal_data(new l2zz_internal_data());
 
 extern "C" int lyra2Zz_test_hash(int thr_id, uint32_t *block_data);
 
@@ -119,21 +137,36 @@ static bool l2zz_get_hex_str(const json_t *blocktemplate, const char *key, intTy
 	return true;
 }
 
-typedef uint8_t sha256_t[32];
 
-typedef struct l2zz_hash {
-	sha256_t hash;
-} l2zz_hash_t;
 
 static l2zz_hash_t l2zz_double_sha(uint8_t *in, size_t len)
 {
-	l2zz_hash_t l2z1, l2z2;
+	l2zz_hash_t l2z1;
 
+	/* d stands for "double" and not "default" */
 	sha256d(&l2z1.hash[0], in, (int) len);
-	sha256d(&l2z2.hash[0], &l2z1.hash[0], sizeof(l2z1.hash));
 
-	return l2z2;
+	return l2z1;
 }
+
+#define l2zz_parse_transact(name) \
+		json_t *t_##name = json_object_get(arr_val, #name);			\
+																	\
+		if (unlikely(!json_is_string(t_##name)))					\
+			goto not_string;										\
+																	\
+		const char *t_##name##_str = json_string_value(t_##name);	\
+																	\
+		if (unlikely(!t_##name##_str))								\
+			goto bad_string;										\
+																	\
+		size_t t_len = strlen(t_##name##_str);						\
+																	\
+		if (unlikely(!t_len))										\
+			goto empty_string;										\
+																	\
+		if (t_len & 0x1)											\
+			t_len++	
 
 static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroot)
 {
@@ -166,38 +199,27 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 		/* create first set of hashes */
 
 		json_array_foreach(arr_tx, index, arr_val) {
-			json_t *data = json_object_get(arr_val, "hash");
+			/* hash hex encoded transaction data */
+			l2zz_parse_transact(data);
+
 			std::vector<uint8_t> buff;
+			buff.resize(t_len >> 1);
 
-			if (unlikely(!json_is_string(data)))
-				goto not_string;
+			hex2bin(&buff[0], t_data_str, t_len >> 1);
 
-			data_str = json_string_value(data);
+			hashes[index] = l2zz_double_sha(&buff[0], buff.size());
 
-			if (unlikely(!data_str))
-				goto bad_string;
+			/* keep track of the data so we can send it over the wire */
+			g_internal_data->transactions.push_back(std::move(buff));
+		}
 
-			len = strlen(data_str);
-
-			if (unlikely(!len))
-				goto empty_string;
-
-			if (len & 0x1)
-				len++;
-
-			buff.resize(len >> 1);
-
-			// NOTE: is the endianness correct here? verify in the wallet...
-			//hex2bin(&buff[0], data_str, len);
-			//
-
-			hex2bin(&hashes[index].hash[0], data_str, len);
-
-			//hashes[index] =  //l2zz_double_sha(&buff[0], buff.size());
+		/* merkle root is just hash/id of coinbase transaction if all we have is the coinbase */
+		if (num_entries == 1) {
+			memcpy(mroot.begin(), &hashes[0].hash[0], mroot.size());
+			return true;
 		}
 
 		/* build up merkle tree until we have a root hash */
-
 		while (hashes.size() > 1) {
 			if (hashes.size() & 1)
 				hashes.push_back(hashes.back());
@@ -265,6 +287,8 @@ bad_string:
 	return false;
 }
 
+#undef l2zz_parse_transact
+
 static void l2zz_print_info(lyra2zz_block_header_t *header, const uint256& merkle_root, const uint256& prev_block_hash, const uint256& accum)
 {
 	char *m = bin2hex((const unsigned char *) merkle_root.begin(), merkle_root.size());
@@ -324,8 +348,6 @@ void lyra2Zz_make_header(
 
 	ret->data[28] = 0x80000000;
 	ret->data[31] = 0x00000280;
-
-	//uint256 target2 = uint256().SetCompact(bits);
 
 	memcpy(&ret->target_decoded[0], target.begin(), target.size()); 
 
@@ -400,7 +422,7 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 	uint256 target = uint256().SetCompact(header->bits);
 	std::string strtarget = target.GetHex();
 
-	std::string hex_data;
+	std::stringstream hex_data_stream;
 
 	std::string str_time, str_bits, str_nonce, str_ver;
 
@@ -411,21 +433,39 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 	str_nonce = get_hex_bytes(header->nonce);
 	str_ver = get_hex_bytes(header->version);
 
-	hex_data.append(str_ver);
-	hex_data.append(get_hex_bytes(header->prev_block));
-	hex_data.append(get_hex_bytes(header->merkle_root));
-	hex_data.append(str_time);
-	hex_data.append(str_bits);
-	hex_data.append(str_nonce);
-	hex_data.append(get_hex_bytes(header->accum_checkpoint));
-	hex_data.append("00"); // amount of transactions
+	/* header data */
+	hex_data_stream << str_ver;
+	hex_data_stream << get_hex_bytes(header->prev_block);
+	hex_data_stream << get_hex_bytes(header->merkle_root);
+	hex_data_stream << str_time;
+	hex_data_stream << str_bits;
+	hex_data_stream << str_nonce;
+	hex_data_stream << get_hex_bytes(header->accum_checkpoint);
 	
-	hex_data.append("00"); // signature size
+	/* transactions */
+
+	size_t num_trans = g_internal_data->transactions.size() & 0xFF;
+
+	hex_data_stream << get_hexb((uint8_t) num_trans);
+
+	for (size_t i = 0; i < g_internal_data->transactions.size(); ++i) {
+		char *encoded_t = bin2hex(
+			(const unsigned char *)g_internal_data->transactions[i].data(),  
+			g_internal_data->transactions[i].size());
+
+		hex_data_stream << encoded_t;
+
+		free(encoded_t);
+	}
+
+	hex_data_stream << "00"; // signature size
 
 	/* build JSON-RPC request */
 
 	char s[4096];
 	memset(s, 0, sizeof(s));
+
+	std::string hex_data = hex_data_stream.str();
 
 	sprintf(s,
 		"{\"method\": \"submitblock\", \"params\": [\"%s\"], \"id\":10}\r\n",
@@ -486,6 +526,9 @@ int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 	uint64_t noncerange;
 	int32_t version;
 	uint32_t bits, time;
+
+	/* clear out previous block info */
+	g_internal_data->reset();
 
 	if (!l2zz_gbt_get_uint256(blocktemplate, "target", target))
 		return false;
