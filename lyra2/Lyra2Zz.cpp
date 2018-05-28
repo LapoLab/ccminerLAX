@@ -129,16 +129,19 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 
 	{
 		std::vector<l2zz_hash_t> hashes{num_entries};
+		memset(&hashes[0], 0, sizeof(hashes[0]) * hashes.size());
+
 		json_t *arr_val = nullptr;
 		size_t len = 0;
 		const char* data_str = nullptr;
-		uint8_t concat[sizeof(sha256_t) << 1];
+		const register size_t sh256sz = sizeof(sha256_t);
+		uint8_t concat[sh256sz << 1];
 		std::vector<l2zz_hash_t> new_hashes;
 
 		/* create first set of hashes */
 
 		json_array_foreach(arr_tx, index, arr_val) {
-			json_t *data = json_object_get(arr_val, "data");
+			json_t *data = json_object_get(arr_val, "hash");
 			std::vector<uint8_t> buff;
 
 			if (unlikely(!json_is_string(data)))
@@ -160,9 +163,12 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 			buff.resize(len >> 1);
 
 			// NOTE: is the endianness correct here? verify in the wallet...
-			hex2bin(&buff[0], data_str, len);
+			//hex2bin(&buff[0], data_str, len);
+			//
 
-			hashes[index] = l2zz_double_sha(&buff[0], buff.size());
+			hex2bin(&hashes[index].hash[0], data_str, len);
+
+			//hashes[index] =  //l2zz_double_sha(&buff[0], buff.size());
 		}
 
 		/* build up merkle tree until we have a root hash */
@@ -174,8 +180,8 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 			new_hashes.resize(hashes.size() >> 1);
 
 			for (size_t i = 0; i < new_hashes.size(); ++i) {
-				memcpy(&concat[0], &hashes[(i << 1)].hash[0], sizeof(sha256_t));
-				memcpy(&concat[sizeof(sha256_t)], &hashes[(i << 1) + 1].hash[0], sizeof(sha256_t));
+				memcpy(&concat[0], &hashes[(i << 1)].hash[0], sh256sz);
+				memcpy(&concat[sh256sz], &hashes[(i << 1) + 1].hash[0], sh256sz);
 				
 				new_hashes[i] = l2zz_double_sha(&concat[0], sizeof(concat));
 			}
