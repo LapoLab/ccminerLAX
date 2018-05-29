@@ -462,12 +462,12 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 
 	/* build JSON-RPC request */
 
-	char s[4096];
-	memset(s, 0, sizeof(s));
-
 	std::string hex_data = hex_data_stream.str();
 
-	sprintf(s,
+	std::vector<char> s(4096 + hex_data.size());
+	memset(&s[0], 0, s.size());
+
+	sprintf(&s[0],
 		"{\"method\": \"submitblock\", \"params\": [\"%s\"], \"id\":10}\r\n",
 		hex_data.c_str());
 
@@ -495,7 +495,7 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 			hex_data.size(), 
 			str_block_hash.c_str(),
 			str_target.c_str(),
-			s);
+			s.data());
 	}
 
 	/* one final check */
@@ -510,7 +510,7 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 	}
 
 	/* issue JSON-RPC request */
-	json_t *val = json_rpc_call_pool(curl, pool, s, false, false, NULL);
+	json_t *val = json_rpc_call_pool(curl, pool, s.data(), false, false, NULL);
 	if (unlikely(!val)) {
 		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "json_rpc_call failed");
 		return false;
