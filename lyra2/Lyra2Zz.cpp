@@ -11,16 +11,266 @@ extern "C" {
 
 typedef uint8_t sha256_t[32];
 
+typedef std::vector<uint8_t> l2zz_script_t;
+typedef int64_t l2zz_amount_t;
+
 typedef struct l2zz_hash {
 	sha256_t hash;
 } l2zz_hash_t;
 
+struct l2zz_outpoint {
+	uint256 hash;
+	uint32_t n;
+};
+
+struct l2zz_outpoint0 {
+	uint256_32_t hash;
+	uint32_t n;
+};
+
+struct l2zz_in0 {
+	l2zz_outpoint0 prevout;
+};
+
+struct l2zz_in1 {
+	uint32_t n_sequence;
+};
+
+struct l2zz_in {
+	l2zz_outpoint prevout;
+	l2zz_script_t script_sig;
+	uint32_t n_sequence;
+};
+
+struct l2zz_out {
+	l2zz_amount_t n_value;
+	l2zz_script_t pub_key;
+};
+
+enum {
+	    // zerocoin
+    OP_ZEROCOINMINT = 0xc1,
+    OP_ZEROCOINSPEND = 0xc2,
+};
+
+static bool is_script_zerocoin_mint(const l2zz_script_t& s)
+{
+	return !s.empty() && s.at(0) == OP_ZEROCOINMINT;
+}
+
+static bool is_script_zerocoin_spend(const l2zz_script_t& s)
+{
+	return !s.empty() && s.at(0) == OP_ZEROCOINSPEND;
+}
+
+static bool output_is_null(const l2zz_outpoint& p)
+{
+	return p.hash.IsNull() && p.n == (uint32_t)(-1);
+}
+
+struct l2zz_transaction {
+	int32_t n_version;
+	std::vector<l2zz_in> in;
+	std::vector<l2zz_out> out;
+	uint32_t n_lock_time;
+
+	bool zerocoin_mint(void) const
+	{
+		for (const l2zz_out& o: out) {
+			if (is_script_zerocoin_mint(o.pub_key))
+				return true;
+		}
+
+		return false;
+	}
+
+	bool zerocoin_spend(void) const
+	{
+		return !in.empty() 
+			&& output_is_null(in.at(0).prevout) 
+			&& is_script_zerocoin_spend(in.at(0).script_sig);
+	}
+
+	bool has_zerocoins(void) const
+	{
+		return zerocoin_mint() || zerocoin_spend();
+	}
+
+	bool coinbase(void) const
+	{
+		return in.size() == 1 
+			&& output_is_null(in.at(0).prevout)
+			&& !has_zerocoins();
+	}
+};
+
+typedef struct l2zz_header_helper {
+	int32_t version;
+	uint256_32_t prev_block;
+	uint256_32_t merkle_root;
+	uint32_t time;
+	uint32_t bits;
+	uint32_t nonce;
+	uint256_32_t accum_checkpoint;
+
+} l2zz_header_helper_t;
+
+
+
+static void make_u256(uint256_32_t in, uint256& out)
+{
+	std::vector<unsigned char> tmp(32);
+	memcpy(&tmp[0], &in[0], 32);
+	out = uint256(tmp);
+}
+
+static std::string get_hexb(uint8_t x)
+{
+	std::stringstream ss;
+	ss << std::setfill('0') << std::setw(2) << std::hex << (uint16_t)x;
+	return ss.str();
+}
+
+static std::string get_hex_bytes(uint32_t x)
+{
+	uint8_t *p = (uint8_t*)&x;
+	
+	std::stringstream ss;
+
+	ss << get_hexb(p[0]);
+	ss << get_hexb(p[1]);
+	ss << get_hexb(p[2]);
+	ss << get_hexb(p[3]);
+
+	std::string ret = ss.str();
+
+	return ret;
+}
+
+static std::string get_hex_bytes(uint256_32_t x)
+{
+	std::stringstream ss;
+
+	for (size_t i = 0; i < 8; ++i)
+		ss << get_hex_bytes(x[i]);
+
+	return ss.str();
+}
+
 class l2zz_internal_data {
 public:
 	std::vector<std::vector<uint8_t>> transactions;
+	std::vector<l2zz_transaction> tx_decoded;
+	size_t coinbase_index;
+
+	/*
+	struct compact_size {
+		union variant {
+			uint8_t u8;
+			uint16_t u16;
+			uint32_t u32;
+			uint64_t 
+		};
+	}
+	*/
+
+	l2zz_internal_data(void) 
+		: coinbase_index(0)
+	{}
+
+	uint8_t * read_compact_size(size_t& value, uint8_t *p)
+	{
+		size_t b1 = (size_t)(*p);
+
+		if (b1 <= 252) {
+			value = b1;
+			return p + 1;
+		} else if (b1 == 253) {
+			uint16_t k;
+			p = read_data(k, p);
+			value = k;
+		} else if (b1 == 254) {			
+			uint32_t k;
+			p = read_data(k, p);
+			value = k;
+		} else {
+			uint64_t k;
+			p = read_data(k, p);
+			value = k;
+		}
+
+		return p;
+	}
+
+	template <class dataType>
+	uint8_t * read_data(dataType& value, uint8_t * p)
+	{
+		value = *((dataType *)p);
+		return p + sizeof(dataType);
+	}
+
+	uint8_t * read_buffer(std::vector<uint8_t>& buffer, uint8_t *p)
+	{
+		size_t buff_size;
+
+		p = read_compact_size(buff_size, p);
+		buffer.resize(buff_size);
+
+		if (!buffer.empty()) {
+			memcpy(&buffer[0], p, buff_size);
+		}
+
+		return p + buff_size;
+	}
+
+	void decode_transaction(std::vector<uint8_t>& tx)
+	{
+		l2zz_transaction decoded;
+
+		uint8_t *p = tx.data();
+
+		p = read_data(decoded.n_version, p);
+
+		size_t in_count;
+		p = read_compact_size(in_count, p);
+
+		for (size_t i = 0; i < in_count; ++i) {
+			l2zz_in in;
+			
+			uint256_32_t hash;
+			memcpy(&hash[0], p, sizeof(hash));
+			p += sizeof(hash);
+
+			p = read_data(in.prevout.n, p);
+			
+			p = read_buffer(in.script_sig, p);
+			p = read_data(in.n_sequence, p);
+
+			decoded.in.push_back(in);
+		}
+
+		size_t out_count;
+		p = read_compact_size(out_count, p);
+
+		for (size_t i = 0; i < out_count; ++i) {
+			l2zz_out out;
+
+			p = read_data(out.n_value, p);
+			p = read_buffer(out.pub_key, p);
+		}
+
+		p = read_data(decoded.n_lock_time, p);
+
+		if (decoded.coinbase()) {
+			coinbase_index = tx_decoded.size();
+		}
+
+		tx_decoded.push_back(decoded);
+	}
 
 	void reset(void) {
 		transactions.clear();
+		tx_decoded.clear();
 	}
 };
 
@@ -209,6 +459,8 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 
 			hashes[index] = l2zz_double_sha(&buff[0], buff.size());
 
+			g_internal_data->decode_transaction(buff);
+
 			/* keep track of the data so we can send it over the wire */
 			g_internal_data->transactions.push_back(std::move(buff));
 		}
@@ -354,56 +606,7 @@ void lyra2Zz_make_header(
 	ret->byte_view = (uint8_t *)ret->data;
 }
 
-typedef struct l2zz_header_helper {
-	int32_t version;
-	uint256_32_t prev_block;
-	uint256_32_t merkle_root;
-	uint32_t time;
-	uint32_t bits;
-	uint32_t nonce;
-	uint256_32_t accum_checkpoint;
 
-} l2zz_header_helper_t;
-
-static void make_u256(uint256_32_t in, uint256& out)
-{
-	std::vector<unsigned char> tmp(32);
-	memcpy(&tmp[0], &in[0], 32);
-	out = uint256(tmp);
-}
-
-static std::string get_hexb(uint8_t x)
-{
-	std::stringstream ss;
-	ss << std::setfill('0') << std::setw(2) << std::hex << (uint16_t)x;
-	return ss.str();
-}
-
-static std::string get_hex_bytes(uint32_t x)
-{
-	uint8_t *p = (uint8_t*)&x;
-	
-	std::stringstream ss;
-
-	ss << get_hexb(p[0]);
-	ss << get_hexb(p[1]);
-	ss << get_hexb(p[2]);
-	ss << get_hexb(p[3]);
-
-	std::string ret = ss.str();
-
-	return ret;
-}
-
-static std::string get_hex_bytes(uint256_32_t x)
-{
-	std::stringstream ss;
-
-	for (size_t i = 0; i < 8; ++i)
-		ss << get_hex_bytes(x[i]);
-
-	return ss.str();
-}
 
 int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 {
