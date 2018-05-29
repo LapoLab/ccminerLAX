@@ -9,6 +9,17 @@ extern "C" {
 #include <iomanip>
 #include <memory>
 
+static inline std::string l2zz_gbt_get_jstring(const json_t* blocktemplate, const char* key);
+static inline json_int_t l2zz_gbt_get_jint(const json_t* blocktemplate, const char* key);
+
+template <typename intType>
+static bool l2zz_gbt_get_int(const json_t *blocktemplate, const char *key, intType &val);
+
+static bool l2zz_gbt_get_uint256(const json_t *blocktemplate, const char *key, uint256 &out);
+
+template <typename intType>
+static bool l2zz_get_hex_str(const json_t *blocktemplate, const char *key, intType &out, bool reverse = true);
+
 typedef uint8_t sha256_t[32];
 
 typedef std::vector<uint8_t> l2zz_script_t;
@@ -47,12 +58,153 @@ struct l2zz_out {
 	l2zz_script_t pub_key;
 };
 
-enum {
-	    // zerocoin
+/** Script opcodes */
+enum
+{
+    // push value
+    OP_0 = 0x00,
+    OP_FALSE = OP_0,
+    OP_PUSHDATA1 = 0x4c,
+    OP_PUSHDATA2 = 0x4d,
+    OP_PUSHDATA4 = 0x4e,
+    OP_1NEGATE = 0x4f,
+    OP_RESERVED = 0x50,
+    OP_1 = 0x51,
+    OP_TRUE=OP_1,
+    OP_2 = 0x52,
+    OP_3 = 0x53,
+    OP_4 = 0x54,
+    OP_5 = 0x55,
+    OP_6 = 0x56,
+    OP_7 = 0x57,
+    OP_8 = 0x58,
+    OP_9 = 0x59,
+    OP_10 = 0x5a,
+    OP_11 = 0x5b,
+    OP_12 = 0x5c,
+    OP_13 = 0x5d,
+    OP_14 = 0x5e,
+    OP_15 = 0x5f,
+    OP_16 = 0x60,
+
+    // control
+    OP_NOP = 0x61,
+    OP_VER = 0x62,
+    OP_IF = 0x63,
+    OP_NOTIF = 0x64,
+    OP_VERIF = 0x65,
+    OP_VERNOTIF = 0x66,
+    OP_ELSE = 0x67,
+    OP_ENDIF = 0x68,
+    OP_VERIFY = 0x69,
+    OP_RETURN = 0x6a,
+
+    // stack ops
+    OP_TOALTSTACK = 0x6b,
+    OP_FROMALTSTACK = 0x6c,
+    OP_2DROP = 0x6d,
+    OP_2DUP = 0x6e,
+    OP_3DUP = 0x6f,
+    OP_2OVER = 0x70,
+    OP_2ROT = 0x71,
+    OP_2SWAP = 0x72,
+    OP_IFDUP = 0x73,
+    OP_DEPTH = 0x74,
+    OP_DROP = 0x75,
+    OP_DUP = 0x76,
+    OP_NIP = 0x77,
+    OP_OVER = 0x78,
+    OP_PICK = 0x79,
+    OP_ROLL = 0x7a,
+    OP_ROT = 0x7b,
+    OP_SWAP = 0x7c,
+    OP_TUCK = 0x7d,
+
+    // splice ops
+    OP_CAT = 0x7e,
+    OP_SUBSTR = 0x7f,
+    OP_LEFT = 0x80,
+    OP_RIGHT = 0x81,
+    OP_SIZE = 0x82,
+
+    // bit logic
+    OP_INVERT = 0x83,
+    OP_AND = 0x84,
+    OP_OR = 0x85,
+    OP_XOR = 0x86,
+    OP_EQUAL = 0x87,
+    OP_EQUALVERIFY = 0x88,
+    OP_RESERVED1 = 0x89,
+    OP_RESERVED2 = 0x8a,
+
+    // numeric
+    OP_1ADD = 0x8b,
+    OP_1SUB = 0x8c,
+    OP_2MUL = 0x8d,
+    OP_2DIV = 0x8e,
+    OP_NEGATE = 0x8f,
+    OP_ABS = 0x90,
+    OP_NOT = 0x91,
+    OP_0NOTEQUAL = 0x92,
+
+    OP_ADD = 0x93,
+    OP_SUB = 0x94,
+    OP_MUL = 0x95,
+    OP_DIV = 0x96,
+    OP_MOD = 0x97,
+    OP_LSHIFT = 0x98,
+    OP_RSHIFT = 0x99,
+
+    OP_BOOLAND = 0x9a,
+    OP_BOOLOR = 0x9b,
+    OP_NUMEQUAL = 0x9c,
+    OP_NUMEQUALVERIFY = 0x9d,
+    OP_NUMNOTEQUAL = 0x9e,
+    OP_LESSTHAN = 0x9f,
+    OP_GREATERTHAN = 0xa0,
+    OP_LESSTHANOREQUAL = 0xa1,
+    OP_GREATERTHANOREQUAL = 0xa2,
+    OP_MIN = 0xa3,
+    OP_MAX = 0xa4,
+
+    OP_WITHIN = 0xa5,
+
+    // crypto
+    OP_RIPEMD160 = 0xa6,
+    OP_SHA1 = 0xa7,
+    OP_SHA256 = 0xa8,
+    OP_HASH160 = 0xa9,
+    OP_HASH256 = 0xaa,
+    OP_CODESEPARATOR = 0xab,
+    OP_CHECKSIG = 0xac,
+    OP_CHECKSIGVERIFY = 0xad,
+    OP_CHECKMULTISIG = 0xae,
+    OP_CHECKMULTISIGVERIFY = 0xaf,
+
+    // expansion
+    OP_NOP1 = 0xb0,
+    OP_NOP2 = 0xb1,
+    OP_NOP3 = 0xb2,
+    OP_NOP4 = 0xb3,
+    OP_NOP5 = 0xb4,
+    OP_NOP6 = 0xb5,
+    OP_NOP7 = 0xb6,
+    OP_NOP8 = 0xb7,
+    OP_NOP9 = 0xb8,
+    OP_NOP10 = 0xb9,
+
+    // zerocoin
     OP_ZEROCOINMINT = 0xc1,
     OP_ZEROCOINSPEND = 0xc2,
-};
 
+    // template matching params
+    OP_SMALLINTEGER = 0xfa,
+    OP_PUBKEYS = 0xfb,
+    OP_PUBKEYHASH = 0xfd,
+    OP_PUBKEY = 0xfe,
+
+    OP_INVALIDOPCODE = 0xff,
+};
 static bool is_script_zerocoin_mint(const l2zz_script_t& s)
 {
 	return !s.empty() && s.at(0) == OP_ZEROCOINMINT;
@@ -86,21 +238,27 @@ struct l2zz_transaction {
 
 	bool zerocoin_spend(void) const
 	{
-		return !in.empty() 
-			&& output_is_null(in.at(0).prevout) 
-			&& is_script_zerocoin_spend(in.at(0).script_sig);
+		const bool a = !in.empty();
+		const bool b = output_is_null(in.at(0).prevout);
+		const bool c = is_script_zerocoin_spend(in.at(0).script_sig);
+
+		return a && b && c;
 	}
 
 	bool has_zerocoins(void) const
 	{
-		return zerocoin_mint() || zerocoin_spend();
+		const bool a = zerocoin_mint();
+		const bool b = zerocoin_spend();
+		return a || b;
 	}
 
 	bool coinbase(void) const
 	{
-		return in.size() == 1 
-			&& output_is_null(in.at(0).prevout)
-			&& !has_zerocoins();
+		const bool a = in.size() == 1;
+		const bool b = output_is_null(in.at(0).prevout);
+		const bool c = !has_zerocoins();
+	
+		return a && b && c;
 	}
 };
 
@@ -163,17 +321,6 @@ public:
 	std::vector<l2zz_transaction> tx_decoded;
 	size_t coinbase_index;
 
-	/*
-	struct compact_size {
-		union variant {
-			uint8_t u8;
-			uint16_t u16;
-			uint32_t u32;
-			uint64_t 
-		};
-	}
-	*/
-
 	l2zz_internal_data(void) 
 		: coinbase_index(0)
 	{}
@@ -223,7 +370,82 @@ public:
 		return p + buff_size;
 	}
 
-	void decode_transaction(std::vector<uint8_t>& tx)
+	bool make_coinbase(const json_t *blocktemplate, std::vector<uint8_t>& cb_buffer)
+	{
+		const size_t scriptsz = 1;
+		uint8_t script[scriptsz];
+		script[0] = OP_NOP;
+
+		const size_t basesz = 63;
+
+		cb_buffer.resize(basesz + scriptsz, 0);
+
+		uint8_t *data = &cb_buffer[0];
+
+		uint32_t h = 0;
+		if (!l2zz_gbt_get_int(blocktemplate, "height", h)) {
+			applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "could not get block height");
+			return false;
+		}
+
+		l2zz_amount_t cb_value = 0;
+		if (!l2zz_gbt_get_int(blocktemplate, "coinbasevalue", cb_value)) {
+			applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "could not get coinbase value");
+			return false;
+		}
+
+		/* the following is adapted from https://github.com/bitcoin/libblkmaker/blob/master/blkmaker.c#L189 */
+
+		size_t off = 0;
+
+		if (!data)
+			return 0;
+	
+		memcpy(&data[0],
+			"\x01\0\0\0"  /* txn ver */
+ 			"\x01"        /* input count */
+				"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"  /* prevout */
+				"\xff\xff\xff\xff"  /* index (-1) */
+				"\x02"              /* scriptSig length */
+			, 42);
+
+		off += 43;
+	
+		while (h > 127) {
+			++data[41];
+			data[off++] = h & 0xff;
+			h >>= 8;
+		}
+
+		data[off++] = h;
+		data[42] = data[41] - 1; /* height serialization length (sans opcode) */
+
+		memcpy(&data[off],
+			"\xff\xff\xff\xff"  /* sequence */
+			"\x01"				/* output count */
+		, 5);
+		
+		off += 5;
+
+		for (size_t i = 0; i < sizeof(cb_value); ++i) 
+			data[off + i] = (cb_value >> (8 * i)) & 0xff;
+		
+		off += sizeof(cb_value);
+
+		data[off++] = scriptsz;
+		
+		if (scriptsz) {
+			memcpy(&data[off], script, scriptsz);
+			off += scriptsz;
+		}
+
+		memset(&data[off], 0, 4);  /* lock time */
+		off += 4;
+
+		return true;
+	}
+
+	void decode_transaction(std::vector<uint8_t>& tx, size_t index)
 	{
 		l2zz_transaction decoded;
 
@@ -262,7 +484,7 @@ public:
 		p = read_data(decoded.n_lock_time, p);
 
 		if (decoded.coinbase()) {
-			coinbase_index = tx_decoded.size();
+			__nop();
 		}
 
 		tx_decoded.push_back(decoded);
@@ -353,7 +575,7 @@ std::string reverse_hex_string(const std::string& in)
 }
 
 template <typename intType>
-static bool l2zz_get_hex_str(const json_t *blocktemplate, const char *key, intType &out, bool reverse = true)
+static bool l2zz_get_hex_str(const json_t *blocktemplate, const char *key, intType &out, bool reverse)
 {
 	std::string str_hex = l2zz_gbt_get_jstring(blocktemplate, key);
 	if (str_hex.empty())
@@ -432,12 +654,20 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 
 	num_entries = json_array_size(arr_tx);
 
-	if (unlikely(num_entries == 0))
-		goto no_entries;
-
 	{
-		std::vector<l2zz_hash_t> hashes{num_entries};
+		std::vector<l2zz_hash_t> hashes{num_entries + 1};
 		memset(&hashes[0], 0, sizeof(hashes[0]) * hashes.size());
+	
+		{
+			std::vector<uint8_t> cb;
+
+			if (!g_internal_data->make_coinbase(blocktemplate, cb))
+				return false;
+
+			hashes[0] = l2zz_double_sha(&cb[0], cb.size());
+
+			g_internal_data->transactions.push_back(cb);
+		}
 
 		json_t *arr_val = nullptr;
 		size_t len = 0;
@@ -457,12 +687,15 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 
 			hex2bin(&buff[0], t_data_str, t_len >> 1);
 
-			hashes[index] = l2zz_double_sha(&buff[0], buff.size());
+			/* add 1 to account for coinbase */
+			l2zz_hash_t h = l2zz_double_sha(&buff[0], buff.size());
 
-			g_internal_data->decode_transaction(buff);
+			memcpy(&hashes[index + 1].hash[0], &h.hash[0], sizeof(h.hash));
+
+			//g_internal_data->decode_transaction(buff, index);
 
 			/* keep track of the data so we can send it over the wire */
-			g_internal_data->transactions.push_back(std::move(buff));
+			g_internal_data->transactions.push_back(buff);
 		}
 
 		/* merkle root is just hash/id of coinbase transaction if all we have is the coinbase */
@@ -709,6 +942,7 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 			LYRA2ZZ_LOG_HEADER "block hash %s > target %s", str_block_hash.c_str(),
 			str_target.c_str());
 
+		g_internal_data->reset();
 		return false;
 	}
 
@@ -716,10 +950,14 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 	json_t *val = json_rpc_call_pool(curl, pool, s.data(), false, false, NULL);
 	if (unlikely(!val)) {
 		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "json_rpc_call failed");
+
+		g_internal_data->reset();
 		return false;
 	}
 
 	json_decref(val);
+
+	g_internal_data->reset();
 	return true;
 }
 
@@ -729,9 +967,6 @@ int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 	uint64_t noncerange;
 	int32_t version;
 	uint32_t bits, time;
-
-	/* clear out previous block info */
-	g_internal_data->reset();
 
 	if (!l2zz_gbt_get_uint256(blocktemplate, "target", target))
 		return false;
