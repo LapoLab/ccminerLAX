@@ -273,8 +273,6 @@ typedef struct l2zz_header_helper {
 
 } l2zz_header_helper_t;
 
-
-
 static void make_u256(uint256_32_t in, uint256& out)
 {
 	std::vector<unsigned char> tmp(32);
@@ -319,12 +317,7 @@ class l2zz_internal_data {
 public:
 	std::vector<std::vector<uint8_t>> transactions;
 	std::vector<l2zz_transaction> tx_decoded;
-	size_t coinbase_index;
-
-	l2zz_internal_data(void) 
-		: coinbase_index(0)
-	{}
-
+	
 	uint8_t * read_compact_size(size_t& value, uint8_t *p)
 	{
 		size_t b1 = (size_t)(*p);
@@ -370,13 +363,15 @@ public:
 		return p + buff_size;
 	}
 
-	bool make_coinbase(const json_t *blocktemplate, std::vector<uint8_t>& cb_buffer)
+	bool make_coinbase(const json_t *blocktemplate, sha256_t hash)
 	{
 		const size_t scriptsz = 1;
 		uint8_t script[scriptsz];
 		script[0] = OP_NOP;
 
 		const size_t basesz = 63;
+
+		std::vector<uint8_t> cb_buffer;
 
 		cb_buffer.resize(basesz + scriptsz, 0);
 
@@ -442,6 +437,13 @@ public:
 		memset(&data[off], 0, 4);  /* lock time */
 		off += 4;
 
+		sha256d(
+			(unsigned char*) &hash[0], 
+			(const unsigned char *)cb_buffer.data(), 
+			cb_buffer.size());
+
+		transactions.insert(transactions.begin(), cb_buffer);
+
 		return true;
 	}
 
@@ -482,10 +484,6 @@ public:
 		}
 
 		p = read_data(decoded.n_lock_time, p);
-
-		if (decoded.coinbase()) {
-			__nop();
-		}
 
 		tx_decoded.push_back(decoded);
 	}
@@ -640,6 +638,10 @@ static l2zz_hash_t l2zz_double_sha(uint8_t *in, size_t len)
 		if (t_len & 0x1)											\
 			t_len++	
 
+
+/*	we explicitly choose not to lock in here, since it's only called
+	from the lyra2Zz_get_blocktemplate function which takes care of the locking */
+
 static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroot)
 {
 	json_t *arr_tx = json_object_get(blocktemplate, "transactions");
@@ -658,16 +660,8 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 		std::vector<l2zz_hash_t> hashes{num_entries + 1};
 		memset(&hashes[0], 0, sizeof(hashes[0]) * hashes.size());
 	
-		{
-			std::vector<uint8_t> cb;
-
-			if (!g_internal_data->make_coinbase(blocktemplate, cb))
+		if (!g_internal_data->make_coinbase(blocktemplate, hashes[0].hash))
 				return false;
-
-			hashes[0] = l2zz_double_sha(&cb[0], cb.size());
-
-			g_internal_data->transactions.push_back(cb);
-		}
 
 		json_t *arr_val = nullptr;
 		size_t len = 0;
@@ -692,8 +686,6 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 
 			memcpy(&hashes[index + 1].hash[0], &h.hash[0], sizeof(h.hash));
 
-			//g_internal_data->decode_transaction(buff, index);
-
 			/* keep track of the data so we can send it over the wire */
 			g_internal_data->transactions.push_back(buff);
 		}
@@ -705,15 +697,14 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 		}
 
 		/* build up merkle tree until we have a root hash */
-		while (hashes.size() > 1) {
-			if (hashes.size() & 1)
-				hashes.push_back(hashes.back());
-		
-			new_hashes.resize(hashes.size() >> 1);
+		while (hashes.size() > 1) {		
+			new_hashes.resize((hashes.size() + 1) >> 1);
 
 			for (size_t i = 0; i < new_hashes.size(); ++i) {
+				size_t j = min((i << 1) + 1, hashes.size() - 1);
+
 				memcpy(&concat[0], &hashes[(i << 1)].hash[0], sh256sz);
-				memcpy(&concat[sh256sz], &hashes[(i << 1) + 1].hash[0], sh256sz);
+				memcpy(&concat[sh256sz], &hashes[j].hash[0], sh256sz);
 				
 				new_hashes[i] = l2zz_double_sha(&concat[0], sizeof(concat));
 			}
@@ -839,8 +830,6 @@ void lyra2Zz_make_header(
 	ret->byte_view = (uint8_t *)ret->data;
 }
 
-
-
 int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 {
 	/* serialize the header data */
@@ -883,7 +872,7 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 	size_t num_trans = g_internal_data->transactions.size() & 0xFF;
 
 	hex_data_stream << get_hexb((uint8_t) num_trans);
-
+	
 	for (size_t i = 0; i < g_internal_data->transactions.size(); ++i) {
 		char *encoded_t = bin2hex(
 			(const unsigned char *)g_internal_data->transactions[i].data(),  
@@ -942,23 +931,23 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 			LYRA2ZZ_LOG_HEADER "block hash %s > target %s", str_block_hash.c_str(),
 			str_target.c_str());
 
-		g_internal_data->reset();
-		return false;
+		goto fail;
 	}
 
 	/* issue JSON-RPC request */
 	json_t *val = json_rpc_call_pool(curl, pool, s.data(), false, false, NULL);
 	if (unlikely(!val)) {
 		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "json_rpc_call failed");
-
-		g_internal_data->reset();
-		return false;
+		
+		goto fail;
 	}
 
 	json_decref(val);
 
-	g_internal_data->reset();
 	return true;
+
+fail:
+	return false;
 }
 
 int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_header_t *header)
@@ -967,6 +956,8 @@ int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_hea
 	uint64_t noncerange;
 	int32_t version;
 	uint32_t bits, time;
+
+	g_internal_data->reset();
 
 	if (!l2zz_gbt_get_uint256(blocktemplate, "target", target))
 		return false;
