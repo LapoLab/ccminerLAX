@@ -1164,19 +1164,6 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 		}
 	}
 
-	if (opt_algo == ALGO_LYRA2ZZ) {
-		lyra2zz_block_header_t header;
-
-		if (!lyra2Zz_read_getblocktemplate(val, &header))
-			return false;
-
-		work->noncerange.u32[0] = header.min_nonce;
-		work->noncerange.u32[1] = header.max_nonce;
-
-		memcpy(&work->target[0], &header.target_decoded[0], sizeof(header.target_decoded));
-		memcpy(&work->data[0], &header.data[0],	LYRA2ZZ_BLOCK_HEADER_LEN_BYTES);
-	}
-
 	return true;
 }
 
@@ -1204,7 +1191,14 @@ static bool get_blocktemplate(CURL *curl, struct work *work)
 		return false;
 	}
 
-	bool rc = gbt_work_decode(json_object_get(val, "result"), work);
+	const json_t *result = json_object_get(val, "result");
+
+	bool rc = gbt_work_decode(result, work);
+
+	if (rc && opt_algo == ALGO_LYRA2ZZ) {
+		if (!lyra2Zz_gbt_work_decode(curl, result, work))
+			return false;
+	}
 
 	json_decref(val);
 

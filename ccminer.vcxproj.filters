@@ -363,6 +363,9 @@
     <ClCompile Include="lyra2\Lyra2Zz.cpp">
       <Filter>Source Files\lyra2</Filter>
     </ClCompile>
+    <ClCompile Include="base58.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="algos.h">
@@ -619,6 +622,9 @@
     </ClInclude>
     <ClInclude Include="lyra2\Lyra2Zz.h">
       <Filter>Header Files\lyra2</Filter>
+    </ClInclude>
+    <ClInclude Include="libbase58.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

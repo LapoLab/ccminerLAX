@@ -1,13 +1,19 @@
 #include "Lyra2Zz.h"
 #include "uint256.h"
 #include "../miner.h"
+
 extern "C" {
 	#include "Lyra2Z.h"
 }
+
 #include <vector>
 #include <sstream>
 #include <iomanip>
 #include <memory>
+
+#include "../sph/sph_sha2.h"
+
+#include "libbase58.h"
 
 static inline std::string l2zz_gbt_get_jstring(const json_t* blocktemplate, const char* key);
 static inline json_int_t l2zz_gbt_get_jint(const json_t* blocktemplate, const char* key);
@@ -19,6 +25,68 @@ static bool l2zz_gbt_get_uint256(const json_t *blocktemplate, const char *key, u
 
 template <typename intType>
 static bool l2zz_get_hex_str(const json_t *blocktemplate, const char *key, intType &out, bool reverse = true);
+
+static void l2zz_dump_json(const char*tag, const json_t *obj)
+{
+	char *s = json_dumps(obj, JSON_ENCODE_ANY);
+	applog(LOG_DEBUG, LYRA2ZZ_LOG_HEADER "[%s] json: %s", tag, s);
+	free(s);
+}
+
+#define l2zz_align8(sz) ((sz + 7) & (~7))
+
+static bool l2zz_b58_sha256(void *digest, const void *data, size_t datasz)
+{
+	sph_sha256_context ctx;
+	sph_sha256_init(&ctx);
+	sph_sha256(&ctx, data, datasz);
+	sph_sha256_close(&ctx, digest);
+
+	return true;
+}
+
+#define L2ZZ_PUBKEY_SCRIPT_SIZE 25
+
+/* adapted from https://raw.githubusercontent.com/bitcoin/libblkmaker/master/base58.c */
+static size_t l2zz_address_to_script(void *out, size_t outsz, const char *addr) {
+	unsigned char addrbin[L2ZZ_PUBKEY_SCRIPT_SIZE];
+	unsigned char *cout = (unsigned char *) out;
+	const size_t b58sz = strlen(addr);
+	int addrver;
+	size_t rv;
+	
+	rv = sizeof(addrbin);
+	if (!b58_sha256_impl)
+		b58_sha256_impl = l2zz_b58_sha256;
+	if (!b58tobin(addrbin, &rv, addr, b58sz))
+		return 0;
+	addrver = b58check(addrbin, sizeof(addrbin), addr, b58sz);
+	switch (addrver) {
+		case   0:	// Bitcoin pubkey hash
+		case 111:	// Testnet pubkey hash
+		case 109:	// Testnet (?) pubkey hash
+			if (outsz < (rv = 25))
+				return rv;
+			cout[ 0] = 0x76;  // OP_DUP
+			cout[ 1] = 0xa9;  // OP_HASH160
+			cout[ 2] = 0x14;  // push 20 bytes
+			memcpy(&cout[3], &addrbin[1], 20);
+			cout[23] = 0x88;  // OP_EQUALVERIFY
+			cout[24] = 0xac;  // OP_CHECKSIG
+			return rv;
+		case   5:  // Bitcoin script hash
+		case 196:  // Testnet script hash
+			if (outsz < (rv = 23))
+				return rv;
+			cout[ 0] = 0xa9;  // OP_HASH160
+			cout[ 1] = 0x14;  // push 20 bytes
+			memcpy(&cout[2], &addrbin[1], 20);
+			cout[22] = 0x87;  // OP_EQUAL
+			return rv;
+		default:
+			return 0;
+	}
+}
 
 typedef uint8_t sha256_t[32];
 
@@ -32,19 +100,6 @@ typedef struct l2zz_hash {
 struct l2zz_outpoint {
 	uint256 hash;
 	uint32_t n;
-};
-
-struct l2zz_outpoint0 {
-	uint256_32_t hash;
-	uint32_t n;
-};
-
-struct l2zz_in0 {
-	l2zz_outpoint0 prevout;
-};
-
-struct l2zz_in1 {
-	uint32_t n_sequence;
 };
 
 struct l2zz_in {
@@ -317,6 +372,8 @@ class l2zz_internal_data {
 public:
 	std::vector<std::vector<uint8_t>> transactions;
 	std::vector<l2zz_transaction> tx_decoded;
+	std::string masternode_pubkey;
+	std::string rawchange_pubkey;
 	
 	uint8_t * read_compact_size(size_t& value, uint8_t *p)
 	{
@@ -363,34 +420,56 @@ public:
 		return p + buff_size;
 	}
 
+	uint8_t * cb_write_output(
+		uint8_t *data, 
+		uint8_t *script, 
+		size_t scriptsz, 
+		l2zz_amount_t cb_value,
+		size_t output_sz)
+	{
+		for (size_t i = 0; i < sizeof(cb_value); ++i) 
+				data[i] = (cb_value >> (8 * i)) & 0xff;
+		
+		//data sizeof(cb_value);
+
+		data[sizeof(cb_value)] = scriptsz;
+		
+		if (scriptsz) {
+			memcpy(&data[sizeof(cb_value) + 1], script, scriptsz);
+		}
+
+		return data + output_sz;
+	}
+
 	bool make_coinbase(const json_t *blocktemplate, sha256_t hash)
 	{
-		const size_t scriptsz = 1;
-		uint8_t script[scriptsz];
-		script[0] = OP_NOP;
+		const size_t scriptsz = L2ZZ_PUBKEY_SCRIPT_SIZE;
+		
+		uint8_t script_masternode[scriptsz];
+		memset(&script_masternode[0], 0, sizeof(script_masternode));
+		
+		if (!l2zz_address_to_script(&script_masternode[0], scriptsz, masternode_pubkey.c_str())) 
+			return false;
 
-		const size_t basesz = 63;
+		uint8_t script_rawchange[scriptsz];
+		memset(&script_rawchange[0], 0, sizeof(script_rawchange));
+
+		if (!l2zz_address_to_script(&script_rawchange[0], scriptsz, rawchange_pubkey.c_str()))
+			return false;
+
+		const size_t output_size = sizeof(l2zz_amount_t) + 1 + scriptsz;
+		const size_t output_bytes = 2 * output_size; 
+
+		const size_t basesz = 53;
 
 		std::vector<uint8_t> cb_buffer;
 
-		cb_buffer.resize(basesz + scriptsz, 0);
+		/* win32 seems to assume 8 byte alignment; without it we get a heap corruption */
+		cb_buffer.resize(l2zz_align8(basesz + output_bytes), 0);
 
 		uint8_t *data = &cb_buffer[0];
 
-		uint32_t h = 0;
-		if (!l2zz_gbt_get_int(blocktemplate, "height", h)) {
-			applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "could not get block height");
-			return false;
-		}
-
-		l2zz_amount_t cb_value = 0;
-		if (!l2zz_gbt_get_int(blocktemplate, "coinbasevalue", cb_value)) {
-			applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "could not get coinbase value");
-			return false;
-		}
-
 		/* the following is adapted from https://github.com/bitcoin/libblkmaker/blob/master/blkmaker.c#L189 */
-
 		size_t off = 0;
 
 		if (!data)
@@ -405,42 +484,70 @@ public:
 			, 42);
 
 		off += 43;
-	
-		while (h > 127) {
-			++data[41];
-			data[off++] = h & 0xff;
-			h >>= 8;
+
+		/* height data push script */
+		{
+			uint32_t h = 0;
+		
+			if (!l2zz_gbt_get_int(blocktemplate, "height", h)) {
+				applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "could not get block height");
+				return false;
+			}
+
+			while (h > 127) {
+				++data[41];
+				data[off++] = h & 0xff;
+				h >>= 8;
+			}
+
+			data[off++] = h;
 		}
 
-		data[off++] = h;
-		data[42] = data[41] - 1; /* height serialization length (sans opcode) */
+		data[42] = data[41] - 1; /* Push <height serialization length> bytes OPCODE */
 
 		memcpy(&data[off],
 			"\xff\xff\xff\xff"  /* sequence */
-			"\x01"				/* output count */
+			"\x02"				/* output count */
 		, 5);
 		
 		off += 5;
 
-		for (size_t i = 0; i < sizeof(cb_value); ++i) 
-			data[off + i] = (cb_value >> (8 * i)) & 0xff;
-		
-		off += sizeof(cb_value);
+		data = &cb_buffer[off];
 
-		data[off++] = scriptsz;
+		/* provide masternode reward  */
 		
-		if (scriptsz) {
-			memcpy(&data[off], script, scriptsz);
-			off += scriptsz;
+		l2zz_amount_t payee_value = 0;
+		{
+
+			if (!l2zz_gbt_get_int(blocktemplate, "payee_amount", payee_value)) {
+				applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "could not get payee amount");
+				return false;
+			}
+
+			data = cb_write_output(data, script_masternode, scriptsz, payee_value, output_size);
+		}
+		
+		/* set host reward (whoever is running this miner) */
+		{
+			l2zz_amount_t cb_value = 0;
+			
+			if (!l2zz_gbt_get_int(blocktemplate, "coinbasevalue", cb_value)) {
+				applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "could not get coinbase value");
+				return false;
+			}
+
+			data = cb_write_output(data, script_rawchange, scriptsz, cb_value - payee_value, output_size);
 		}
 
-		memset(&data[off], 0, 4);  /* lock time */
-		off += 4;
+		memset(data, 0, 4);  /* lock time */
+		data += 4;
 
 		sha256d(
 			(unsigned char*) &hash[0], 
 			(const unsigned char *)cb_buffer.data(), 
 			cb_buffer.size());
+
+		/*volatile size_t x = data - &cb_buffer[0];*/
 
 		transactions.insert(transactions.begin(), cb_buffer);
 
@@ -489,11 +596,13 @@ public:
 	}
 
 	void reset(void) {
+		masternode_pubkey = "";
 		transactions.clear();
 		tx_decoded.clear();
 	}
 };
 
+static pthread_mutex_t g_internal_mut = PTHREAD_MUTEX_INITIALIZER;
 static std::unique_ptr<l2zz_internal_data> g_internal_data(new l2zz_internal_data());
 
 extern "C" int lyra2Zz_test_hash(int thr_id, uint32_t *block_data);
@@ -639,9 +748,6 @@ static l2zz_hash_t l2zz_double_sha(uint8_t *in, size_t len)
 			t_len++	
 
 
-/*	we explicitly choose not to lock in here, since it's only called
-	from the lyra2Zz_get_blocktemplate function which takes care of the locking */
-
 static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroot)
 {
 	json_t *arr_tx = json_object_get(blocktemplate, "transactions");
@@ -770,31 +876,164 @@ static void l2zz_print_info(lyra2zz_block_header_t *header, const uint256& merkl
 	char *m = bin2hex((const unsigned char *) merkle_root.begin(), merkle_root.size());
 	char *p = bin2hex((const unsigned char *) prev_block_hash.begin(), prev_block_hash.size());
 	char *a = bin2hex((const unsigned char *) accum.begin(), accum.size());
-	char *b = bin2hex((const unsigned char *) &header->block_hash[0], sizeof(header->block_hash));
 
-	std::vector<unsigned char> bhh(sizeof(header->block_hash));
-	memcpy(&bhh[0], header->block_hash, sizeof(header->block_hash));
-	uint256 bh{bhh};
+	char* encoding = bin2hex((uchar *)header->byte_view, 112); 
+	size_t len = strlen(encoding);
 
 	std::string m2 = merkle_root.GetHex();
 	std::string p2 = prev_block_hash.GetHex();
 	std::string a2 = accum.GetHex();
-	std::string b2 = bh.GetHex();
 
 	applog(LOG_BLUE, 
 		"\n-----\n"
-		"BlockHash: %s\nBlockHash_: %s\n\n"
+		"Encoding (%i): %s\n\n"
 		"Merkle Root: %s\nMerkle Root_:%s\n\n"
 		"PrevBlockHash: %s\nPrevBlockHash_: %s\n\n"
 		"Accum Checkpoint: %s\nAccum Checkpoint_: %s\n\n"
 		"Time: %lu"
 		"\n-----\n", 
-		b, b2.c_str(), m, m2.c_str(), p, p2.c_str(), a, a2.c_str(), time);
+		len,
+		encoding,
+		m, m2.c_str(), p, p2.c_str(), a, a2.c_str(), time);
 			
-	free(b); //free(b2);
+	free(encoding);
 	free(m); //free(m2);
 	free(p); //free(p2);
 	free(a); //free(a2);
+}
+
+static bool lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_header_t *header)
+{
+	uint256 accum, prev_block_hash, merkle_root, target;
+	uint64_t noncerange;
+	int32_t version;
+	uint32_t bits, time;
+
+	if (!l2zz_gbt_get_uint256(blocktemplate, "target", target))
+		return false;
+
+	if (!l2zz_gbt_get_uint256(blocktemplate, "accumulatorcheckpoint", accum)) 
+		return false;
+	
+	if (!l2zz_gbt_get_uint256(blocktemplate, "previousblockhash", prev_block_hash)) 
+		return false;
+	
+	if (!l2zz_gbt_get_int(blocktemplate, "version", version)) 
+		return false;
+	
+	if (!l2zz_gbt_get_int(blocktemplate, "curtime", time)) 
+		return false;
+
+	if (!l2zz_get_hex_str(blocktemplate, "bits", bits)) 
+		return false;
+
+	if (!l2zz_get_hex_str(blocktemplate, "noncerange", noncerange, false)) 
+		return false;
+	
+	bool_t overflow = false;
+	bool_t negative = false;
+
+	uint256 t2;
+	t2 = t2.SetCompact(bits, &overflow, &negative);
+
+	if (target != t2) {
+		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "mismatch between bits and target after bits has been expanded");
+		return false;
+	}
+
+	if (overflow) {
+		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "target overflow");
+		return false;
+	}
+
+	if (negative) {
+		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "target negative");
+		return false;
+	}
+
+	if (!l2zz_gbt_calc_merkle_root(blocktemplate, merkle_root)) 
+		return false;
+
+	if (header) {
+		lyra2Zz_make_header(
+			header,
+			version, 
+			prev_block_hash, 
+			merkle_root, 
+			time, 
+			bits, 
+			noncerange,
+			accum,
+			target
+		);
+
+		//lyra2Zz_test_hash(0, NULL);
+
+		l2zz_print_info(header, merkle_root, prev_block_hash, accum);
+	}
+
+	return true;
+}
+
+static json_t * l2zz_exec_read_cmd(CURL *curl, const char *cmd, struct work *work)
+{
+	struct pool_infos *pool = &pools[work->pooln];
+
+	int curl_err = 0;
+	json_t *val = json_rpc_call_pool(curl, pool, cmd, false, false, &curl_err);
+	
+	if (curl_err || !val) {
+		applog(LOG_ERR, 
+			LYRA2ZZ_LOG_HEADER 
+			"RPC call error. error code retuned: %i; cmd:\n%s", 
+			curl_err, cmd);
+
+		return NULL;
+	}
+
+	//l2zz_dump_json(cmd, val); 
+
+	json_t *result = json_object_get(val, "result");
+
+	if (!result) {
+		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "no result returned from cmd: %s\n", cmd);
+		return NULL;
+	}
+
+	return result;
+}
+
+static bool l2zz_gbt_get_transact_info(CURL *curl, struct work *work)
+{
+	{
+		const char *masternode_cmd = "{\"method\": \"masternodecurrent\", \"params\": [],"
+				" \"id\":9}\r\n";
+	
+		json_t *result = l2zz_exec_read_cmd(curl, masternode_cmd, work);
+
+		g_internal_data->masternode_pubkey = l2zz_gbt_get_jstring(result, "pubkey");
+
+		if (g_internal_data->masternode_pubkey.empty()) {
+			applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "no masternode pubkey found");
+			return false;
+		}
+	}
+
+	{
+		const char *rawchangeaddress_cmd = "{\"method\": \"getrawchangeaddress\", \"params\": [],"
+				" \"id\":9}\r\n";
+
+		json_t *result = l2zz_exec_read_cmd(curl, rawchangeaddress_cmd, work);
+
+		g_internal_data->rawchange_pubkey = std::string(json_string_value(result));
+
+		if (g_internal_data->rawchange_pubkey.empty()) {
+			applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "no rawchange pubkey found");
+			return false;
+		}
+	}
+
+	return true;
 }
 
 void lyra2Zz_make_header(
@@ -950,77 +1189,40 @@ fail:
 	return false;
 }
 
-int lyra2Zz_read_getblocktemplate(const json_t *blocktemplate, lyra2zz_block_header_t *header)
+int lyra2Zz_gbt_work_decode(CURL *curl, const json_t *val, struct work *work)
 {
-	uint256 accum, prev_block_hash, merkle_root, target;
-	uint64_t noncerange;
-	int32_t version;
-	uint32_t bits, time;
-
 	g_internal_data->reset();
 
-	if (!l2zz_gbt_get_uint256(blocktemplate, "target", target))
-		return false;
-
-	if (!l2zz_gbt_get_uint256(blocktemplate, "accumulatorcheckpoint", accum)) 
-		return false;
-	
-	if (!l2zz_gbt_get_uint256(blocktemplate, "previousblockhash", prev_block_hash)) 
-		return false;
-	
-	if (!l2zz_gbt_get_int(blocktemplate, "version", version)) 
-		return false;
-	
-	if (!l2zz_gbt_get_int(blocktemplate, "curtime", time)) 
-		return false;
-
-	if (!l2zz_get_hex_str(blocktemplate, "bits", bits)) 
-		return false;
-
-	if (!l2zz_get_hex_str(blocktemplate, "noncerange", noncerange, false)) 
-		return false;
-	
-	bool_t overflow = false;
-	bool_t negative = false;
-
-	uint256 t2;
-	t2 = t2.SetCompact(bits, &overflow, &negative);
-
-	if (target != t2) {
-		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "mismatch between bits and target after bits has been expanded");
+	if (!val) {
+		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "received null json result");
 		return false;
 	}
 
-	if (overflow) {
-		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "target overflow");
+	if (!curl) {
+		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "received null curl param");
 		return false;
 	}
 
-	if (negative) {
-		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "target negative");
+	if (!work) {
+		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "received null work param");
 		return false;
 	}
 
-	if (!l2zz_gbt_calc_merkle_root(blocktemplate, merkle_root)) 
+	/* get necessary masternode information */
+	
+	if (!l2zz_gbt_get_transact_info(curl, work))
 		return false;
 
-	if (header) {
-		lyra2Zz_make_header(
-			header,
-			version, 
-			prev_block_hash, 
-			merkle_root, 
-			time, 
-			bits, 
-			noncerange,
-			accum,
-			target
-		);
+	lyra2zz_block_header_t header;
 
-		//lyra2Zz_test_hash(0, NULL);
+	if (!lyra2Zz_read_getblocktemplate(val, &header))
+		return false;
 
-		l2zz_print_info(header, merkle_root, prev_block_hash, accum);
-	}
+	work->noncerange.u32[0] = header.min_nonce;
+	work->noncerange.u32[1] = header.max_nonce;
+
+	memcpy(&work->target[0], &header.target_decoded[0], sizeof(header.target_decoded));
+	memcpy(&work->data[0], &header.data[0],	LYRA2ZZ_BLOCK_HEADER_LEN_BYTES);
 
 	return true;
 }

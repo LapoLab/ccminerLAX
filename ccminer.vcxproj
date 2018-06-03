@@ -210,6 +210,7 @@
     </CudaLink>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="base58.c" />
     <ClCompile Include="compat\getopt\getopt_long.c" />
     <ClCompile Include="compat\gettimeofday.c" />
     <ClCompile Include="compat\jansson\dump.c" />
@@ -267,6 +268,7 @@
     <ClCompile Include="lyra2\Lyra2.c" />
     <ClInclude Include="equi\eqcuda.hpp" />
     <ClInclude Include="equi\equihash.h" />
+    <ClInclude Include="libbase58.h" />
     <ClInclude Include="lyra2\cuda_lyra2Zz_sm5.cuh" />
     <ClInclude Include="lyra2\Lyra2Zz.h" />
     <ClInclude Include="lyra2\Sponge.h" />
