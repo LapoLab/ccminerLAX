@@ -330,8 +330,8 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 			}
 			else if (vhash[7] > ptarget[7]) {
 				gpu_increment_reject(thr_id);
-				if (!opt_quiet)	gpulog(LOG_WARNING, thr_id,
-					"result for %08x does not validate on CPU!", work->nonces[0]);
+				//if (!opt_quiet)	gpulog(LOG_WARNING, thr_id,
+					//"result for %08x does not validate on CPU!", work->nonces[0]);
 				pdata[19] = work->nonces[0];
 				continue;
 			}
@@ -378,7 +378,7 @@ static bool test_hash(int thr_id, uint32_t *input28)
 		be32enc(adata + i, input28[i]);
 
 	blake256_cpu_init(thr_id, throughput);
-	blake256_cpu_setBlock_112(input28);
+	blake256_cpu_setBlock_112(adata);
 	blake256_cpu_hash_112(thr_id, throughput, start_n, d_hash[thr_id], 0);
 
 	uint256 target = uint256().SetCompact(input28[18]);
@@ -391,9 +391,9 @@ static bool test_hash(int thr_id, uint32_t *input28)
 		uint64_t gpu_state_hash[4];
 
 		uint32_t out[8];
-		be32enc(&adata[19], start_n + thread);
+		be32enc(&input28[19], start_n + thread);
 			
-		lyra2Z_hash_112(out, adata);
+		lyra2Z_hash_112(out, input28);
 
 		cudaMemcpy(
 			&gpu_state_hash[0], 
