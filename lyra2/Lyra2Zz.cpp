@@ -45,49 +45,6 @@ static bool l2zz_b58_sha256(void *digest, const void *data, size_t datasz)
 	return true;
 }
 
-#define L2ZZ_PUBKEY_SCRIPT_SIZE 25
-
-/* adapted from https://raw.githubusercontent.com/bitcoin/libblkmaker/master/base58.c */
-static size_t l2zz_address_to_script(void *out, size_t outsz, const char *addr) {
-	unsigned char addrbin[L2ZZ_PUBKEY_SCRIPT_SIZE];
-	unsigned char *cout = (unsigned char *) out;
-	const size_t b58sz = strlen(addr);
-	int addrver;
-	size_t rv;
-	
-	rv = sizeof(addrbin);
-	if (!b58_sha256_impl)
-		b58_sha256_impl = l2zz_b58_sha256;
-	if (!b58tobin(addrbin, &rv, addr, b58sz))
-		return 0;
-	addrver = b58check(addrbin, sizeof(addrbin), addr, b58sz);
-	switch (addrver) {
-		case   0:	// Bitcoin pubkey hash
-		case 111:	// Testnet pubkey hash
-		case 109:	// Testnet (?) pubkey hash
-			if (outsz < (rv = 25))
-				return rv;
-			cout[ 0] = 0x76;  // OP_DUP
-			cout[ 1] = 0xa9;  // OP_HASH160
-			cout[ 2] = 0x14;  // push 20 bytes
-			memcpy(&cout[3], &addrbin[1], 20);
-			cout[23] = 0x88;  // OP_EQUALVERIFY
-			cout[24] = 0xac;  // OP_CHECKSIG
-			return rv;
-		case   5:  // Bitcoin script hash
-		case 196:  // Testnet script hash
-			if (outsz < (rv = 23))
-				return rv;
-			cout[ 0] = 0xa9;  // OP_HASH160
-			cout[ 1] = 0x14;  // push 20 bytes
-			memcpy(&cout[2], &addrbin[1], 20);
-			cout[22] = 0x87;  // OP_EQUAL
-			return rv;
-		default:
-			return 0;
-	}
-}
-
 typedef uint8_t sha256_t[32];
 
 typedef std::vector<uint8_t> l2zz_script_t;
@@ -368,6 +325,11 @@ static std::string get_hex_bytes(uint256_32_t x)
 	return ss.str();
 }
 
+/* these are solely for coinbase generation */
+static const size_t l2zz_pubkey_script_size = 25;
+static const size_t l2zz_output_size = sizeof(l2zz_amount_t) + 1 + l2zz_pubkey_script_size;
+static const size_t l2zz_coinbase_size = 54 + 2 * l2zz_output_size; 
+
 class l2zz_internal_data {
 public:
 	std::vector<std::vector<uint8_t>> transactions;
@@ -428,44 +390,81 @@ public:
 		size_t output_sz)
 	{
 		for (size_t i = 0; i < sizeof(cb_value); ++i) 
-				data[i] = (cb_value >> (8 * i)) & 0xff;
-		
-		//data sizeof(cb_value);
+			data[i] = (cb_value >> (8 * i)) & 0xff;
 
-		data[sizeof(cb_value)] = scriptsz;
+		if (scriptsz > 255) 
+			applog(LOG_WARNING, 
+				LYRA2ZZ_LOG_HEADER "scriptsz received with size > 255. This isn't supported yet. Size: %l", 
+				scriptsz);
+
+		data[sizeof(cb_value)] = (uint8_t) scriptsz;
 		
-		if (scriptsz) {
+		if (scriptsz)
 			memcpy(&data[sizeof(cb_value) + 1], script, scriptsz);
-		}
 
 		return data + output_sz;
 	}
 
+	/* adapted from https://raw.githubusercontent.com/bitcoin/libblkmaker/master/base58.c */
+	size_t address_to_script(uint8_t *out, size_t outsz, const char *addr) {
+		unsigned char addrbin[25];
+
+		unsigned char *cout = (unsigned char *) out;
+		const size_t b58sz = strlen(addr);
+		int addrver;
+		size_t rv;
+	
+		rv = sizeof(addrbin);
+		if (!b58_sha256_impl)
+			b58_sha256_impl = l2zz_b58_sha256;
+		if (!b58tobin(addrbin, &rv, addr, b58sz))
+			return 0;
+		addrver = b58check(addrbin, sizeof(addrbin), addr, b58sz);
+		switch (addrver) {
+			case   0:	// Bitcoin pubkey hash
+			case 111:	// Testnet pubkey hash
+			case 109:	// LAPO Testnet (?) pubkey hash
+				if (outsz < (rv = 25))
+					return rv;
+				cout[ 0] = 0x76;  // OP_DUP
+				cout[ 1] = 0xa9;  // OP_HASH160
+				cout[ 2] = 0x14;  // push 20 bytes
+				memcpy(&cout[3], &addrbin[1], 20);
+				cout[23] = 0x88;  // OP_EQUALVERIFY
+				cout[24] = 0xac;  // OP_CHECKSIG
+
+				return rv;
+			case   5:  // Bitcoin script hash
+			case 196:  // Testnet script hash
+				if (outsz < (rv = 23))
+					return rv;
+				cout[ 0] = 0xa9;  // OP_HASH160
+				cout[ 1] = 0x14;  // push 20 bytes
+				memcpy(&cout[2], &addrbin[1], 20);
+				cout[22] = 0x87;  // OP_EQUAL
+				return rv;
+			default:
+				return 0;
+		}
+	}
+
 	bool make_coinbase(const json_t *blocktemplate, sha256_t hash)
-	{
-		const size_t scriptsz = L2ZZ_PUBKEY_SCRIPT_SIZE;
-		
-		uint8_t script_masternode[scriptsz];
+	{	
+		uint8_t script_masternode[l2zz_pubkey_script_size];
 		memset(&script_masternode[0], 0, sizeof(script_masternode));
 		
-		if (!l2zz_address_to_script(&script_masternode[0], scriptsz, masternode_pubkey.c_str())) 
+		if (!address_to_script(&script_masternode[0], l2zz_pubkey_script_size, masternode_pubkey.c_str())) 
 			return false;
 
-		uint8_t script_rawchange[scriptsz];
+		uint8_t script_rawchange[l2zz_pubkey_script_size];
 		memset(&script_rawchange[0], 0, sizeof(script_rawchange));
 
-		if (!l2zz_address_to_script(&script_rawchange[0], scriptsz, rawchange_pubkey.c_str()))
+		if (!address_to_script(&script_rawchange[0], l2zz_pubkey_script_size, rawchange_pubkey.c_str()))
 			return false;
-
-		const size_t output_size = sizeof(l2zz_amount_t) + 1 + scriptsz;
-		const size_t output_bytes = 2 * output_size; 
-
-		const size_t basesz = 53;
 
 		std::vector<uint8_t> cb_buffer;
 
-		/* win32 seems to assume 8 byte alignment; without it we get a heap corruption */
-		cb_buffer.resize(l2zz_align8(basesz + output_bytes), 0);
+		cb_buffer.resize(l2zz_coinbase_size, 0);
 
 		uint8_t *data = &cb_buffer[0];
 
@@ -478,8 +477,8 @@ public:
 		memcpy(&data[0],
 			"\x01\0\0\0"  /* txn ver */
  			"\x01"        /* input count */
-				"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"  /* prevout */
-				"\xff\xff\xff\xff"  /* index (-1) */
+				"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"  /* outpoint prevout */
+				"\xff\xff\xff\xff"  /* outpoint index (-1) */
 				"\x02"              /* scriptSig length */
 			, 42);
 
@@ -505,26 +504,32 @@ public:
 
 		data[42] = data[41] - 1; /* Push <height serialization length> bytes OPCODE */
 
-		memcpy(&data[off],
+		memcpy(
+			&data[off],
 			"\xff\xff\xff\xff"  /* sequence */
-			"\x02"				/* output count */
-		, 5);
+			"\x02",				/* output count */
+			5
+		);
 		
 		off += 5;
 
 		data = &cb_buffer[off];
 
 		/* provide masternode reward  */
-		
 		l2zz_amount_t payee_value = 0;
 		{
-
 			if (!l2zz_gbt_get_int(blocktemplate, "payee_amount", payee_value)) {
 				applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "could not get payee amount");
 				return false;
 			}
 
-			data = cb_write_output(data, script_masternode, scriptsz, payee_value, output_size);
+			data = cb_write_output(
+				data, 
+				script_masternode, 
+				l2zz_pubkey_script_size, 
+				payee_value, 
+				l2zz_output_size
+			);
 		}
 		
 		/* set host reward (whoever is running this miner) */
@@ -536,7 +541,13 @@ public:
 				return false;
 			}
 
-			data = cb_write_output(data, script_rawchange, scriptsz, cb_value - payee_value, output_size);
+			data = cb_write_output(
+				data, 
+				script_rawchange, 
+				l2zz_pubkey_script_size, 
+				cb_value - payee_value, 
+				l2zz_output_size
+			);
 		}
 
 		memset(data, 0, 4);  /* lock time */
@@ -545,9 +556,8 @@ public:
 		sha256d(
 			(unsigned char*) &hash[0], 
 			(const unsigned char *)cb_buffer.data(), 
-			cb_buffer.size());
-
-		/*volatile size_t x = data - &cb_buffer[0];*/
+			(int) cb_buffer.size()
+		);
 
 		transactions.insert(transactions.begin(), cb_buffer);
 
@@ -766,8 +776,8 @@ static bool l2zz_gbt_calc_merkle_root(const json_t *blocktemplate, uint256& mroo
 		std::vector<l2zz_hash_t> hashes{num_entries + 1};
 		memset(&hashes[0], 0, sizeof(hashes[0]) * hashes.size());
 	
-		if (!g_internal_data->make_coinbase(blocktemplate, hashes[0].hash))
-				return false;
+		if (unlikely(!g_internal_data->make_coinbase(blocktemplate, hashes[0].hash)))
+			return false;
 
 		json_t *arr_val = nullptr;
 		size_t len = 0;
