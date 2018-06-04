@@ -307,9 +307,9 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 			uint32_t _ALIGN(64) vhash[8];
 
 			be32enc(&endiandata[19], work->nonces[0]);
-
+			//endiandata[19] = work->nonces[0];
 			lyra2Z_hash_112(vhash, endiandata);
-
+			
 			if (vhash[7] <= ptarget[7] && fulltest(vhash, ptarget)) {
 				work->valid_nonces = 1;
 				work->nonces[1] = lyra2Z_getSecNonce(thr_id, 1);
@@ -378,7 +378,7 @@ static bool test_hash(int thr_id, uint32_t *input28)
 		be32enc(adata + i, input28[i]);
 
 	blake256_cpu_init(thr_id, throughput);
-	blake256_cpu_setBlock_112(adata);
+	blake256_cpu_setBlock_112(input28);
 	blake256_cpu_hash_112(thr_id, throughput, start_n, d_hash[thr_id], 0);
 
 	uint256 target = uint256().SetCompact(input28[18]);
@@ -391,9 +391,9 @@ static bool test_hash(int thr_id, uint32_t *input28)
 		uint64_t gpu_state_hash[4];
 
 		uint32_t out[8];
-		be32enc(&input28[19], start_n + thread);
+		be32enc(&adata[19], start_n + thread);
 			
-		lyra2Z_hash_112(out, input28);
+		lyra2Z_hash_112(out, adata);
 
 		cudaMemcpy(
 			&gpu_state_hash[0], 
@@ -453,7 +453,7 @@ static bool large_test(int thr_id)
 {
 #ifdef _MSC_VER
 	uint32_t correct = 0;
-	const uint32_t num_tests = 1 << 10;
+	const uint32_t num_tests = 1 << 8;
 
 	LPCSTR cryptname = __FUNCTION__;
 	HCRYPTPROV hCryptProv = NULL;
