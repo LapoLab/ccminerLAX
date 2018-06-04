@@ -845,12 +845,6 @@ not_array:
 
 	return false;
 
-no_entries:
-	applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", 
-		"no entries in transactions array");
-		
-	return false;
-
 not_string:
 	applog(
 		LOG_ERR, 
