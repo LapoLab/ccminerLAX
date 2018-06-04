@@ -1115,15 +1115,47 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 	size_t num_trans = g_internal_data->transactions.size() & 0xFF;
 
 	hex_data_stream << get_hexb((uint8_t) num_trans);
-	
+
 	for (size_t i = 0; i < g_internal_data->transactions.size(); ++i) {
-		char *encoded_t = bin2hex(
-			(const unsigned char *)g_internal_data->transactions[i].data(),  
-			g_internal_data->transactions[i].size());
+		/* 
+			we're in a loop; we could forgoe allocation by using a larger buffer 
+			and only referring to what's necessary (and reallocing if needed). 
+			That's probably more efficient. For now this works
+		*/
+
+		const size_t max_stack_bytes = 4096;
+		size_t hex_len = g_internal_data->transactions.size() << 1;
+
+		char *encoded_t = hex_len < max_stack_bytes 
+			? (char *)_alloca(hex_len + 1)
+			: (char *)malloc(hex_len + 1);
+		
+		if (unlikely(hex_len >= max_stack_bytes && !encoded_t)) {
+			applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "OOM");
+			return false;
+		}
+
+		memset(encoded_t, 0, hex_len + 1);
+
+		cbin2hex(
+			&encoded_t[0],
+			(const char *) g_internal_data->transactions[i].data(), 
+			g_internal_data->transactions[i].size()
+		);
 
 		hex_data_stream << encoded_t;
 
-		free(encoded_t);
+#ifdef _DEBUG
+		applog(
+			LOG_DEBUG, 
+			"Transaction [%i, %i]: %s", 
+			i,
+			g_internal_data->transactions[i].size(), encoded_t
+		);
+#endif
+
+		if (unlikely(hex_len >= max_stack_bytes))
+			free(encoded_t);
 	}
 
 	hex_data_stream << "00"; // signature size
