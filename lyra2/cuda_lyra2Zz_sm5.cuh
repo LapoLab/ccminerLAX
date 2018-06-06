@@ -878,6 +878,9 @@ void lyra2Zz_gpu_hash_32_3_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_
 		state[2] = __ldg4(&((uint2x4*)DMatrix)[2 * threads + thread]);
 		state[3] = __ldg4(&((uint2x4*)DMatrix)[3 * threads + thread]);
 
+		volatile uint64_t *p64target = (uint64_t *)pTarget;
+		volatile uint64_t *p64state = (uint64_t *)state;
+
 		uint32_t nonce = startNounce + thread;
 		if (((uint64_t*)state)[3] <= ((uint64_t*)pTarget)[3]) {
  			atomicMin(&resNonces[1], resNonces[0]);

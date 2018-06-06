@@ -56,6 +56,7 @@
 #include "equi/equihash.h"
 #include "lyra2/Lyra2Zz.h"
 
+
 #include <cuda_runtime.h>
 
 #ifdef WIN32
@@ -84,10 +85,12 @@ enum workio_commands {
 struct workio_cmd {
 	enum workio_commands	cmd;
 	struct thr_info		*thr;
+	size_t	flag;	/* arbitrary usage for work io */
 	union {
 		struct work	*work;
 	} u;
 	int pooln;
+	
 };
 
 #if defined(OPT_DEBUG_FLAGS)
@@ -616,6 +619,11 @@ void proper_exit(int reason)
 		reason = app_exit_code;
 	}
 
+	if (opt_algo == ALGO_LYRA2ZZ) {
+		usleep(1000 * 1000);
+		lyra2Zz_shutdown();
+	}
+
 	pthread_mutex_lock(&stats_lock);
 	if (check_dups)
 		hashlog_purge_all();
@@ -649,6 +657,8 @@ void proper_exit(int reason)
 	free(opt_api_mcast_des);
 	//free(work_restart);
 	//free(thr_info);
+
+	
 	exit(reason);
 }
 
@@ -1167,7 +1177,9 @@ static bool gbt_work_decode(const json_t *val, struct work *work)
 	return true;
 }
 
-#define GBT_CAPABILITIES "[\"coinbasetxn\", \"coinbasevalue\", \"longpoll\", \"workid\"]"
+//#define GBT_CAPABILITIES "[\"coinbasetxn\", \"coinbasevalue\", \"longpoll\", \"workid\"]"
+
+#define GBT_CAPABILITIES "[\"coinbasetxn\", \"workid\", \"coinbase/append\"]"
 static const char *gbt_req =
 	"{\"method\": \"getblocktemplate\", \"params\": [{"
 	//	"\"capabilities\": " GBT_CAPABILITIES ""
@@ -1195,7 +1207,7 @@ static bool get_blocktemplate(CURL *curl, struct work *work)
 
 	bool rc = gbt_work_decode(result, work);
 
-	if (rc && opt_algo == ALGO_LYRA2ZZ) {
+	if (rc && opt_algo == ALGO_LYRA2ZZ && work->l2zz.needs_internal) {
 		if (!lyra2Zz_gbt_work_decode(curl, result, work))
 			return false;
 	}
@@ -1283,7 +1295,6 @@ static bool get_upstream_work(CURL *curl, struct work *work)
 		return rc;
 	}
 
-	/* since the corresponding wallet doesn't use getwork, we ignore it */
 	if (opt_algo == ALGO_LYRA2ZZ) {
 		gettimeofday(&tv_end, NULL); /* this is only here because it's used in the ALGO_SIA block above in the same way */
 
@@ -1376,6 +1387,11 @@ static bool workio_get_work(struct workio_cmd *wc, CURL *curl)
 	ret_work = (struct work*)aligned_calloc(sizeof(struct work));
 	if (!ret_work)
 		return false;
+
+	if (opt_algo == ALGO_LYRA2ZZ) {
+		ret_work->l2zz.thr_id = wc->thr->id;
+		ret_work->l2zz.needs_internal = wc->flag;
+	}
 
 	/* assign pool number before rpc calls */
 	ret_work->pooln = wc->pooln;
@@ -1522,6 +1538,10 @@ bool get_work(struct thr_info *thr, struct work *work)
 	wc->cmd = WC_GET_WORK;
 	wc->thr = thr;
 	wc->pooln = cur_pooln;
+
+	if (opt_algo == ALGO_LYRA2ZZ && work->l2zz.needs_internal) {
+		wc->flag = true;
+	}
 
 	/* send work request to workio thread */
 	if (!tq_push(thr_info[work_thr_id].q, wc)) {
@@ -1852,6 +1872,35 @@ static bool wanna_mine(int thr_id)
 	return state;
 }
 
+struct cleanup_l2zz {
+	struct work *work;
+
+	bool freed;
+
+	cleanup_l2zz(struct work *w)
+		:	work(w == &g_work ? NULL : w),
+			freed(false)
+	{}
+
+	void free_mem(void)
+	{
+		if (freed)
+			return;
+
+		if (lyra2Zz_is_valid_work(work)) {
+			work->l2zz.free_fn(work->l2zz.thr_id, &work->l2zz.internal_data);
+			memset(&work->l2zz, 0, sizeof(work->l2zz));
+		}
+
+		freed = true;
+	}
+
+	~cleanup_l2zz(void)
+	{
+		free_mem();
+	}
+};
+
 static void *miner_thread(void *userdata)
 {
 	struct thr_info *mythr = (struct thr_info *)userdata;
@@ -1870,6 +1919,8 @@ static void *miner_thread(void *userdata)
 	int rc = 0;
 
 	memset(&work, 0, sizeof(work)); // prevent work from being used uninitialized
+
+	cleanup_l2zz l2zz_cleaner(&work);
 
 	if (opt_priority > 0) {
 		int prio = 2; // default to normal
@@ -1992,6 +2043,12 @@ static void *miner_thread(void *userdata)
 		} else {
 			uint32_t secs = 0;
 			pthread_mutex_lock(&g_work_lock);
+
+			if (opt_algo == ALGO_LYRA2ZZ) {
+				/* set flag to request allocation for lyra2zz */
+				g_work.l2zz.needs_internal = true;
+			}
+
 			secs = (uint32_t) (time(NULL) - g_work_time);
 			if (secs >= scan_time || nonceptr[0] >= (end_nonce - 0x100)) {
 				if (opt_debug && g_work_time && !opt_quiet)
@@ -2067,7 +2124,20 @@ static void *miner_thread(void *userdata)
 				}
 			}
 			#endif
+
+			/*	they should never be equal. Regardless, this is concurrent and an algol switch
+				can occur if a new thread pool takes over. If it's null we have a no-op. */
+			if (work.l2zz.internal_data != g_work.l2zz.internal_data && lyra2Zz_is_valid_work(&work))
+				work.l2zz.free_fn(work.l2zz.thr_id, &work.l2zz.internal_data);
+
 			memcpy(&work, &g_work, sizeof(struct work));
+
+			/* deep copy to avoid race conditions */
+			if (opt_algo == ALGO_LYRA2ZZ) {
+				/*  Ensure previous work from last iteration is freed. */
+				work.l2zz.internal_data = work.l2zz.deep_copy_fn(g_work.l2zz.internal_data);
+			}
+			
 			nonceptr[0] = (UINT32_MAX / opt_n_threads) * thr_id; // 0 if single thr
 		} else
 			nonceptr[0]++; //??
@@ -2620,9 +2690,9 @@ static void *miner_thread(void *userdata)
 		}
 
 		if (rc > 0 && opt_debug)
-			applog(LOG_NOTICE, CL_CYN "found => %08x" CL_GRN " %08x", work.nonces[0], swab32(work.nonces[0]));
+			applog(LOG_NOTICE, CL_CYN "[nonce 0] found => %08x" CL_GRN " %08x", work.nonces[0], swab32(work.nonces[0]));
 		if (rc > 1 && opt_debug)
-			applog(LOG_NOTICE, CL_CYN "found => %08x" CL_GRN " %08x", work.nonces[1], swab32(work.nonces[1]));
+			applog(LOG_NOTICE, CL_CYN "[nonce 1] found => %08x" CL_GRN " %08x", work.nonces[1], swab32(work.nonces[1]));
 
 		timeval_subtract(&diff, &tv_end, &tv_start);
 

@@ -47,4 +47,9 @@ void lyra2Zz_make_header(
 		const uint256& accum_checkpoint,
 		const uint256& target);
 
+
+int lyra2Zz_is_valid_work(struct work *w);
+
+void lyra2Zz_shutdown(void);
+
 #endif // LYRA2ZZ_H_

@@ -711,6 +711,21 @@ struct tx {
 	uint32_t len;
 };
 
+struct lyra2zz_internal;
+typedef struct lyra2zz_internal lyra2zz_internal_t;
+
+typedef void (*lyra2zz_internal_free_t)(int thr_id, lyra2zz_internal_t **);
+
+typedef lyra2zz_internal_t * (*lyra2zz_internal_deep_copy_t)(lyra2zz_internal_t *);
+
+typedef struct lyra2zz_work {
+	int								thr_id;
+	size_t							needs_internal; 
+	lyra2zz_internal_t				*internal_data;
+	lyra2zz_internal_free_t			free_fn;
+	lyra2zz_internal_deep_copy_t	deep_copy_fn;
+} lyra2zz_work_t;
+
 #define MAX_NONCES 2
 struct work {
 	uint32_t data[48];
@@ -746,6 +761,9 @@ struct work {
 	struct tx txs[POK_MAX_TXS];
 	// zec solution
 	uint8_t extra[1388];
+
+	/* Lyra2Z storage */
+	lyra2zz_work_t l2zz;
 };
 
 #define POK_BOOL_MASK 0x00008000

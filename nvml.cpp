@@ -2264,6 +2264,11 @@ void *monitor_thread(void *userdata)
 				cgpu->monitor.tm_displayed = (uint32_t)time(NULL);
 			}
 
+			// NOTE(holland): don't commit this
+			if (cgpu->monitor.gpu_temp >= 65) {
+				proper_exit(EXIT_CODE_USAGE);
+			}
+
 			pthread_mutex_unlock(&cgpu->monitor.lock);
 		}
 		usleep(500); // safety
