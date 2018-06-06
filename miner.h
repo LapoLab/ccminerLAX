@@ -711,6 +711,13 @@ struct tx {
 	uint32_t len;
 };
 
+#define LYRA_MAX_TX_SZ POK_MAX_TX_SZ
+#define LYRA_MAX_TXS 16
+struct lyratx {
+	uint8_t		data[LYRA_MAX_TX_SZ];
+	size_t		len;
+};
+
 #define MAX_NONCES 2
 struct work {
 	uint32_t data[48];
@@ -746,6 +753,9 @@ struct work {
 	struct tx txs[POK_MAX_TXS];
 	// zec solution
 	uint8_t extra[1388];
+
+	struct lyratx lyratxs[LYRA_MAX_TXS];
+	size_t lyratx_count;
 };
 
 #define POK_BOOL_MASK 0x00008000

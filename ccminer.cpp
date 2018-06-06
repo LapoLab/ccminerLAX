@@ -1283,7 +1283,6 @@ static bool get_upstream_work(CURL *curl, struct work *work)
 		return rc;
 	}
 
-	/* since the corresponding wallet doesn't use getwork, we ignore it */
 	if (opt_algo == ALGO_LYRA2ZZ) {
 		gettimeofday(&tv_end, NULL); /* this is only here because it's used in the ALGO_SIA block above in the same way */
 
