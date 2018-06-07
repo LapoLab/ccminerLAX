@@ -768,6 +768,7 @@ public:
 			case   0:	// Bitcoin pubkey hash
 			case 111:	// Testnet pubkey hash
 			case 109:	// LAPO Testnet (?) pubkey hash
+			case 48:	// LAPO main net (?) pubkey hash
 				if (outsz < (rv = 25))
 					return rv;
 				cout[ 0] = OP_DUP;
