@@ -563,6 +563,7 @@ extern double net_diff;
 extern double stratum_diff;
 
 #define MAX_GPUS 16
+#define MAX_GPUS_MASK ((MAX_GPUS - 1))
 //#define MAX_THREADS 32 todo
 extern char* device_name[MAX_GPUS];
 extern short device_map[MAX_GPUS];

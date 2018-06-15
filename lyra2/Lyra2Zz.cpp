@@ -1607,3 +1607,14 @@ int lyra2Zz_gbt_work_decode(CURL *curl, const json_t *val, struct work *work)
 
 	return true;
 }
+
+void lyra2Zz_assign_thread_nonce_range(int thr_id, struct work *work, uint32_t *min_nonce, uint32_t *max_nonce)
+{
+	register uint32_t t_id = thr_id & MAX_GPUS_MASK;
+	register uint32_t nmin = min(work->noncerange.u32[0], work->noncerange.u32[1]);
+	register uint32_t nmax = max(work->noncerange.u32[0], work->noncerange.u32[1]);
+	register uint32_t base = opt_n_threads <= 1 ? 0 : (nmax / opt_n_threads);
+
+	*min_nonce = opt_n_threads <= 1 ? nmin : nmin + base * t_id;
+	*max_nonce = opt_n_threads <= 1 ? nmax : nmin + (base * t_id) + (base - 1);
+}

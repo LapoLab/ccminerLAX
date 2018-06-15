@@ -1951,6 +1951,7 @@ static void *miner_thread(void *userdata)
 			nonceptr = &work.data[EQNONCE_OFFSET]; // 27 is pool extranonce (256bits nonce space)
 			wcmplen = 4+32+32;
 		} else if (opt_algo == ALGO_LYRA2ZZ) {
+			wcmpoft = 0; // it's assigned above, but if it changes for whatever reason the algo will break.
 			nonceptr = work.data + LYRA2ZZ_BLOCK_HEADER_NONCE_OFFSET;
 			wcmplen = LYRA2ZZ_BLOCK_HEADER_LEN_BYTES;
 		}
@@ -2067,7 +2068,12 @@ static void *miner_thread(void *userdata)
 			}
 			#endif
 			memcpy(&work, &g_work, sizeof(struct work));
-			nonceptr[0] = (UINT32_MAX / opt_n_threads) * thr_id; // 0 if single thr
+
+			/* block info has changed, so nonce reset is necessary */
+			if (opt_algo == ALGO_LYRA2ZZ)
+				lyra2Zz_assign_thread_nonce_range(thr_id, &work, &nonceptr[0], &end_nonce);
+			else
+				nonceptr[0] = (UINT32_MAX / opt_n_threads) * thr_id; // 0 if single thr
 		} else
 			nonceptr[0]++; //??
 
@@ -2325,7 +2331,7 @@ static void *miner_thread(void *userdata)
 				minmax = 0x80000;
 				break;
 			case ALGO_LYRA2ZZ:
-				minmax = work.noncerange.u32[1];
+				minmax = end_nonce; /* chunked for gpu range */
 				break;
 			case ALGO_CRYPTOLIGHT:
 			case ALGO_CRYPTONIGHT:
