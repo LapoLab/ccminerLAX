@@ -170,7 +170,7 @@ void lyra2Zz_setTarget(const void *pTargetIn)
 }
 
 __host__
-uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce, uint64_t *d_hash, bool gtx750ti)
+uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce, uint64_t *d_hash0, bool gtx750ti)
 {
 	uint32_t result = UINT32_MAX;
 	cudaMemset(d_GNonces[thr_id], 0xff, 2 * sizeof(uint32_t));
@@ -192,21 +192,6 @@ uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce,
 	dim3 grid3((threads + tpb - 1) / tpb);
 	dim3 block3(tpb);
 	
-	if (device_sm[dev_id] >= 520)
-	{
-		// TODO
-
-		/*
-		lyra2Z_gpu_hash_32_1 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash);
-
-		lyra2Z_gpu_hash_32_2 <<< grid1, block1, 24 * (8 - 0) * sizeof(uint2) * tpb >>> (threads, startNounce, d_hash);
-
-		lyra2Z_gpu_hash_32_3 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash, d_GNonces[thr_id]);
-		*/
-
-
-	}
-	else if (device_sm[dev_id] == 500 || device_sm[dev_id] == 350)
 	{
 		size_t shared_mem = 0;
 
@@ -217,15 +202,13 @@ uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce,
 			// suitable amount to adjust for 10warp
 			shared_mem = 6144;
 
-		l2ZZ::lyra2Zz_gpu_hash_32_1_sm5 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash);
+		l2ZZ::lyra2Zz_gpu_hash_32_1_sm5 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash0);
 
-		l2ZZ::lyra2Zz_gpu_hash_32_2_sm5 <<< grid1, block1, shared_mem >>> (threads, startNounce, (uint2*)d_hash);
+		l2ZZ::lyra2Zz_gpu_hash_32_2_sm5 <<< grid1, block1, shared_mem >>> (threads, startNounce, (uint2*)d_hash0);
 
-		l2ZZ::lyra2Zz_gpu_hash_32_3_sm5 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash, d_GNonces[thr_id]);
-	}/* !!! TODO
-	else
-		lyra2Z_gpu_hash_32_sm2 <<< grid3, block3 >>> (threads, startNounce, d_hash, d_GNonces[thr_id]);
-		*/
+		l2ZZ::lyra2Zz_gpu_hash_32_3_sm5 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash0, d_GNonces[thr_id]);
+	}
+
 	// get first found nonce
 	cudaMemcpy(h_GNonces[thr_id], d_GNonces[thr_id], 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 	result = *h_GNonces[thr_id];
