@@ -566,12 +566,15 @@ public:
 
 	bool has_masternode = true;
 
+	/*	this isn't the entire size; the size will grow
+		according to data that is dynamically sized 
+		(like the byte count needed to store block height) */
 	size_t coinbase_size(void) const
 	{
 		register size_t cb_size = 
 			has_masternode
-			? 54 + 2 * l2zz_output_size
-			: 54 + l2zz_output_size;
+			? 53 + 2 * l2zz_output_size
+			: 53 + l2zz_output_size;
 
 		return cb_size;
 	}
@@ -810,9 +813,10 @@ public:
 
 		std::vector<uint8_t> cb_buffer;
 
-		cb_buffer.resize(coinbase_size(), 0);
+		size_t cbsz = coinbase_size();
 
-		uint8_t *data = &cb_buffer[0];
+		uint8_t *data = (uint8_t *)alloca(cbsz + 32); /* 32 is just aligned padding */
+		memset(data, 0, cbsz + 32);
 
 		/* the following is adapted from https://github.com/bitcoin/libblkmaker/blob/master/blkmaker.c#L189 */
 		size_t off = 0;
@@ -825,7 +829,7 @@ public:
  			"\x01"        /* input count */
 				"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"  /* outpoint prevout */
 				"\xff\xff\xff\xff"  /* outpoint index (-1) */
-				"\x02"              /* scriptSig length */
+				"\x02"					/* scriptSig length */
 			, 42);
 
 		off += 43;
@@ -841,6 +845,7 @@ public:
 
 			while (h > 127) {
 				++data[41];
+				cbsz++;
 				data[off++] = h & 0xff;
 				h >>= 8;
 			}
@@ -853,13 +858,15 @@ public:
 		memcpy(
 			&data[off],
 			"\xff\xff\xff\xff"  /* sequence */
-			"\x02",				/* output count */
+			"\x00",				/* output count */
 			5
 		);
 		
+		data[off + 4] = has_masternode ? 2 : 1;
+
 		off += 5;
 
-		data = &cb_buffer[off];
+		uint8_t *p_script = data + off;
 
 		/* provide masternode reward (if it exists)  */
 		l2zz_amount_t payee_value = 0;
@@ -870,8 +877,8 @@ public:
 				return false;
 			}
 
-			data = cb_write_output(
-				data, 
+			p_script = cb_write_output(
+				p_script, 
 				script_masternode, 
 				l2zz_pubkey_script_size, 
 				payee_value, 
@@ -888,8 +895,8 @@ public:
 				return false;
 			}
 
-			data = cb_write_output(
-				data, 
+			p_script = cb_write_output(
+				p_script, 
 				script_rawchange, 
 				l2zz_pubkey_script_size, 
 				cb_value - payee_value, 
@@ -897,8 +904,13 @@ public:
 			);
 		}
 
-		memset(data, 0, 4);  /* lock time */
-		data += 4;
+		memset(p_script, 0, 4);  /* lock time */
+		p_script += 4;
+
+		volatile uintptr_t sz = (uintptr_t)p_script - (uintptr_t)data;
+
+		cb_buffer.resize(cbsz);
+		memcpy(&cb_buffer[0], data, cbsz);
 
 		sha256d(
 			(unsigned char *) &hash[0], 
@@ -1506,6 +1518,7 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 	/* one final check */
 	if (target < block_hash) {
 		std::string str_block_hash = block_hash.GetHex();
+
 		std::string str_target = target.GetHex();
 		applog(LOG_ERR, 
 			LYRA2ZZ_LOG_HEADER "block hash %s > target %s", str_block_hash.c_str(),
