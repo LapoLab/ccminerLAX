@@ -1529,8 +1529,9 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 	}
 
 	/* issue JSON-RPC request */
-	json_t *val = json_rpc_call_pool(curl, pool, s.data(), false, false, NULL);
-	if (unlikely(!val)) {
+	int error = 0;
+	json_t *val = json_rpc_call_pool(curl, pool, s.data(), false, false, &error);
+	if (unlikely(!val) && error) {
 		applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "json_rpc_call failed");
 		
 		l2zz_submit_fin(false);
