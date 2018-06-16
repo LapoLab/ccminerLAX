@@ -115,8 +115,11 @@
     <Filter Include="Source Files\CUDA\tribus">
       <UniqueIdentifier>{1e548d79-c217-4203-989a-a592fe2b2de3}</UniqueIdentifier>
     </Filter>
-        <Filter Include="Source Files\CUDA\x12">
+    <Filter Include="Source Files\CUDA\x12">
       <UniqueIdentifier>{xde48d89-fx12-1323-129a-b592fe2b2de3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\lyra2">
+      <UniqueIdentifier>{6040e7b8-c7bf-4fce-9a1f-d9cea58c3b33}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -267,13 +270,7 @@
     <ClInclude Include="compat\pthreads\pthread.h">
       <Filter>Header Files\compat</Filter>
     </ClInclude>
-    <ClCompile Include="lyra2\Lyra2.c">
-      <Filter>Source Files\sph</Filter>
-    </ClCompile>
     <ClCompile Include="lyra2\Sponge.c">
-      <Filter>Source Files\sph</Filter>
-    </ClCompile>
-    <ClCompile Include="lyra2\Lyra2Z.c">
       <Filter>Source Files\sph</Filter>
     </ClCompile>
     <ClCompile Include="scrypt.cpp">
@@ -353,6 +350,21 @@
     </ClCompile>
     <ClCompile Include="equi\blake2\blake2bx.cpp">
       <Filter>Source Files\equi</Filter>
+    </ClCompile>
+    <ClCompile Include="uint256.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="lyra2\Lyra2.c">
+      <Filter>Source Files\lyra2</Filter>
+    </ClCompile>
+    <ClCompile Include="lyra2\Lyra2Z.c">
+      <Filter>Source Files\lyra2</Filter>
+    </ClCompile>
+    <ClCompile Include="lyra2\Lyra2Zz.cpp">
+      <Filter>Source Files\lyra2</Filter>
+    </ClCompile>
+    <ClCompile Include="base58.c">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -604,6 +616,15 @@
     </ClInclude>
     <ClInclude Include="x16\cuda_x16.h">
       <Filter>Header Files\CUDA</Filter>
+    </ClInclude>
+    <ClInclude Include="lyra2\cuda_lyra2Zz_sm5.cuh">
+      <Filter>Source Files\CUDA\lyra2</Filter>
+    </ClInclude>
+    <ClInclude Include="lyra2\Lyra2Zz.h">
+      <Filter>Header Files\lyra2</Filter>
+    </ClInclude>
+    <ClInclude Include="libbase58.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -1002,6 +1023,9 @@
     </CudaCompile>
     <CudaCompile Include="x16\x16s.cu">
       <Filter>Source Files\CUDA\x16</Filter>
+    </CudaCompile>
+    <CudaCompile Include="lyra2\cuda_lyra2Zz.cu">
+      <Filter>Source Files\CUDA\lyra2</Filter>
     </CudaCompile>
   </ItemGroup>
   <ItemGroup>

@@ -296,7 +296,8 @@ extern int scanhash_lbry(int thr_id, struct work *work, uint32_t max_nonce, unsi
 extern int scanhash_luffa(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done);
 extern int scanhash_lyra2(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done);
 extern int scanhash_lyra2v2(int thr_id,struct work* work, uint32_t max_nonce, unsigned long *hashes_done);
-extern int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done);
+extern int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done); 
+extern int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done);
 extern int scanhash_myriad(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done);
 extern int scanhash_neoscrypt(int thr_id, struct work *work, uint32_t max_nonce, unsigned long *hashes_done);
 extern int scanhash_nist5(int thr_id, struct work *work, uint32_t max_nonce, unsigned long *hashes_done);
@@ -562,6 +563,7 @@ extern double net_diff;
 extern double stratum_diff;
 
 #define MAX_GPUS 16
+#define MAX_GPUS_MASK ((MAX_GPUS - 1))
 //#define MAX_THREADS 32 todo
 extern char* device_name[MAX_GPUS];
 extern short device_map[MAX_GPUS];
@@ -710,6 +712,13 @@ struct tx {
 	uint32_t len;
 };
 
+#define LYRA_MAX_TX_SZ POK_MAX_TX_SZ
+#define LYRA_MAX_TXS 16
+struct lyratx {
+	uint8_t		data[LYRA_MAX_TX_SZ];
+	size_t		len;
+};
+
 #define MAX_NONCES 2
 struct work {
 	uint32_t data[48];
@@ -745,6 +754,9 @@ struct work {
 	struct tx txs[POK_MAX_TXS];
 	// zec solution
 	uint8_t extra[1388];
+
+	struct lyratx lyratxs[LYRA_MAX_TXS];
+	size_t lyratx_count;
 };
 
 #define POK_BOOL_MASK 0x00008000

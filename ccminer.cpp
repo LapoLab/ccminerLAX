@@ -9,6 +9,15 @@
  * any later version.  See COPYING for more details.
  */
 
+/* 
+ * This is needed in gbt_work_decode for 
+ * reading the accumulatorcheckpoint string.
+ * Note that this shouldn't be included
+ * after any header that includes stdbool.h,
+ * otherwise macro redefinition conflicts will occur.
+ */
+#include "uint256.h" 
+
 #include <ccminer-config.h>
 
 #include <stdio.h>
@@ -45,6 +54,7 @@
 #include "sia/sia-rpc.h"
 #include "crypto/xmr-rpc.h"
 #include "equi/equihash.h"
+#include "lyra2/Lyra2Zz.h"
 
 #include <cuda_runtime.h>
 
@@ -80,9 +90,16 @@ struct workio_cmd {
 	int pooln;
 };
 
+#if defined(OPT_DEBUG_FLAGS)
+bool opt_debug = true;
+bool opt_debug_diff = true;
+bool opt_debug_threads = true;
+#else
 bool opt_debug = false;
 bool opt_debug_diff = false;
 bool opt_debug_threads = false;
+#endif
+
 bool opt_protocol = false;
 bool opt_benchmark = false;
 bool opt_showdiff = true;
@@ -264,6 +281,7 @@ Options:\n\
 			lyra2       CryptoCoin\n\
 			lyra2v2     VertCoin\n\
 			lyra2z      ZeroCoin (3rd impl)\n\
+			lyra2zz     LAPO-ZeroCoin\n\
 			myr-gr      Myriad-Groestl\n\
 			neoscrypt   FeatherCoin, Phoenix, UFO...\n\
 			nist5       NIST5 (TalkCoin)\n\
@@ -1067,6 +1085,9 @@ static bool submit_upstream_work(CURL *curl, struct work *work)
 		else if (opt_algo == ALGO_SIA) {
 			return sia_submit(curl, pool, work);
 		}
+		else if (opt_algo == ALGO_LYRA2ZZ) {
+			return lyra2Zz_submit(curl, pool, work);
+		}
 
 		if (opt_algo != ALGO_HEAVY && opt_algo != ALGO_MJOLLNIR) {
 			for (int i = 0; i < adata_sz; i++)
@@ -1170,7 +1191,14 @@ static bool get_blocktemplate(CURL *curl, struct work *work)
 		return false;
 	}
 
-	bool rc = gbt_work_decode(json_object_get(val, "result"), work);
+	const json_t *result = json_object_get(val, "result");
+
+	bool rc = gbt_work_decode(result, work);
+
+	if (rc && opt_algo == ALGO_LYRA2ZZ) {
+		if (!lyra2Zz_gbt_work_decode(curl, result, work))
+			return false;
+	}
 
 	json_decref(val);
 
@@ -1253,6 +1281,22 @@ static bool get_upstream_work(CURL *curl, struct work *work)
 			return rc;
 		}
 		return rc;
+	}
+
+	if (opt_algo == ALGO_LYRA2ZZ) {
+		gettimeofday(&tv_end, NULL); /* this is only here because it's used in the ALGO_SIA block above in the same way */
+
+		if (!get_mininginfo(curl, work)) {
+			applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "get_mininginfo failure");
+			return false;
+		}
+
+		if (!get_blocktemplate(curl, work)) {
+			applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "get_blocktemplate failure");
+			return false;
+		}
+
+		return true;
 	}
 
 	if (opt_debug_threads)
@@ -1643,15 +1687,15 @@ static bool stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 		memcpy(&work->data[12], sctx->job.coinbase, 32); // merkle_root
 		work->data[20] = 0x80000000;
 		if (opt_debug) applog_hex(work->data, 80);
-	} else if (opt_algo == ALGO_LYRA2ZZ){
+	} else if (opt_algo == ALGO_LYRA2ZZ){ // newly added experimental LAPO support (4/26/2018)
 		for (i = 0; i < 8; i++)
 			work->data[9 + i] = be32dec((uint32_t *)merkle_root + i);
 		work->data[17] = le32dec(sctx->job.ntime);
 		work->data[18] = le32dec(sctx->job.nbits);
 		for (i = 0; i < 8; i++)
-			work->data[20 + i] = be32dec((uint32_t *)sctx->job.accmulatorcheckpoint + i);
+			work->data[20 + i] = be32dec((uint32_t *)sctx->job.accumulatorcheckpoint + i);
 		work->data[28] = 0x80000000;
-		work->data[31] = (opt_algo == ALGO_MJOLLNIR) ? 0x000002A0 : 0x00000280;
+		work->data[31] = /*(opt_algo == ALGO_MJOLLNIR) ? 0x000002A0 : */0x00000280;
 	} else {
 		for (i = 0; i < 8; i++)
 			work->data[9 + i] = be32dec((uint32_t *)merkle_root + i);
@@ -1906,6 +1950,10 @@ static void *miner_thread(void *userdata)
 		} else if (opt_algo == ALGO_EQUIHASH) {
 			nonceptr = &work.data[EQNONCE_OFFSET]; // 27 is pool extranonce (256bits nonce space)
 			wcmplen = 4+32+32;
+		} else if (opt_algo == ALGO_LYRA2ZZ) {
+			wcmpoft = 0; // it's assigned above, but if it changes for whatever reason the algo will break.
+			nonceptr = work.data + LYRA2ZZ_BLOCK_HEADER_NONCE_OFFSET;
+			wcmplen = LYRA2ZZ_BLOCK_HEADER_LEN_BYTES;
 		}
 
 		if (have_stratum) {
@@ -2020,7 +2068,12 @@ static void *miner_thread(void *userdata)
 			}
 			#endif
 			memcpy(&work, &g_work, sizeof(struct work));
-			nonceptr[0] = (UINT32_MAX / opt_n_threads) * thr_id; // 0 if single thr
+
+			/* block info has changed, so nonce reset is necessary */
+			if (opt_algo == ALGO_LYRA2ZZ)
+				lyra2Zz_assign_thread_nonce_range(thr_id, &work, &nonceptr[0], &end_nonce);
+			else
+				nonceptr[0] = (UINT32_MAX / opt_n_threads) * thr_id; // 0 if single thr
 		} else
 			nonceptr[0]++; //??
 
@@ -2271,12 +2324,14 @@ static void *miner_thread(void *userdata)
 				break;
 			case ALGO_LYRA2:
 			case ALGO_LYRA2Z:
-			case ALGO_LYRA2ZZ:
 			case ALGO_NEOSCRYPT:
 			case ALGO_SIB:
 			case ALGO_SCRYPT:
 			case ALGO_VELTOR:
 				minmax = 0x80000;
+				break;
+			case ALGO_LYRA2ZZ:
+				minmax = end_nonce; /* chunked for gpu range */
 				break;
 			case ALGO_CRYPTOLIGHT:
 			case ALGO_CRYPTONIGHT:
