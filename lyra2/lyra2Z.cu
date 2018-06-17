@@ -298,7 +298,14 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	
 	lyra2Zz_setTarget(ptarget);
 
+	__time64_t debug_interval_start = _time64(NULL);
+
+
 	do {
+		struct timeval hash_time, start_iter, end_hash;
+
+		gettimeofday(&start_iter, NULL);
+
 		int order = 0;
 
 		blake256_cpu_hash_112(thr_id, throughput, pdata[19], d_hash[thr_id], order++);
@@ -306,7 +313,10 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 		*hashes_done = pdata[19] - first_nonce + throughput;
 
 		work->nonces[0] = lyra2Zz_cpu_hash_32(thr_id, throughput, pdata[19], d_hash[thr_id], gtx750ti);
-
+		
+		gettimeofday(&end_hash, NULL);
+		timeval_subtract(&hash_time, &end_hash, &start_iter);
+		
 		if (work->nonces[0] != UINT32_MAX)
 		{
 			uint32_t _ALIGN(64) vhash[8];
@@ -340,6 +350,20 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 				}
 				pdata[19] = work->nonces[0];
 				continue;
+			}
+		}
+
+		__time64_t test_time = _time64(NULL);
+
+		if (opt_debug && opt_print_interval != OPT_PRINT_INTERVAL_UNSET) {
+			if (test_time - debug_interval_start >= opt_print_interval) {
+				double dtime = (double) hash_time.tv_sec + 1e-6 * (double) hash_time.tv_usec;
+				applog(
+					LOG_BLUE, 
+					"[%i second update] Hash time (of most recent run, in seconds) %f, Nonce: 0x%x", 
+					opt_print_interval, dtime, pdata[19]);
+			
+				debug_interval_start = test_time;
 			}
 		}
 
