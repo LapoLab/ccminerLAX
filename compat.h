@@ -49,6 +49,11 @@ static __inline int setpriority(int which, int who, int prio)
 #define strdup(...) _strdup(__VA_ARGS__)
 #define strncasecmp(x,y,z) _strnicmp(x,y,z)
 #define strcasecmp(x,y) _stricmp(x,y)
+
+#ifndef PRId64
+#define PRId64 "I64"
+#endif
+
 typedef int ssize_t;
 
 __inline int msver(void) {
@@ -81,11 +86,15 @@ static __inline char * dirname(char *file) {
 # define __func__ __FUNCTION__
 # define __thread __declspec(thread)
 # define _ALIGN(x) __declspec(align(x))
+
 #else
 # define _ALIGN(x) __attribute__ ((aligned(x)))
 /* dirname() for linux/mingw */
 #include <libgen.h>
 #endif
+
+# define __line__ __LINE__
+# define __file__ __FILE__
 
 #ifndef WIN32
 #define MAX_PATH PATH_MAX
