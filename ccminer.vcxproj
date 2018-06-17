@@ -250,6 +250,7 @@
     <ClCompile Include="nvsettings.cpp" />
     <ClCompile Include="pools.cpp" />
     <ClCompile Include="sph\groestl.c" />
+    <ClCompile Include="statelog.cpp" />
     <ClCompile Include="uint256.cpp" />
     <ClCompile Include="util.cpp" />
     <ClCompile Include="bench.cpp" />
@@ -276,6 +277,7 @@
     <ClCompile Include="neoscrypt\neoscrypt.cpp" />
     <ClCompile Include="neoscrypt\neoscrypt-cpu.c" />
     <ClInclude Include="neoscrypt\cuda_vectors.h" />
+    <ClInclude Include="statelog.h" />
     <ClInclude Include="uint256.h" />
     <ClInclude Include="x11\cuda_x11_simd512_sm2.cuh" />
     <ClInclude Include="x16\cuda_x16.h" />

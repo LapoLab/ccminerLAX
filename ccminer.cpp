@@ -100,6 +100,9 @@ bool opt_debug_diff = false;
 bool opt_debug_threads = false;
 #endif
 
+/* arbitrary print interval for debugging */
+int opt_print_interval = OPT_PRINT_INTERVAL_UNSET;
+
 bool opt_protocol = false;
 bool opt_benchmark = false;
 bool opt_showdiff = true;
@@ -326,6 +329,7 @@ Options:\n\
       --cuda-schedule   Set device threads scheduling mode (default: auto)\n\
   -f, --diff-factor     Divide difficulty by this factor (default 1.0) \n\
   -m, --diff-multiplier Multiply difficulty by this value (default 1.0) \n\
+  -M, --print-interval  Arbitrary interval used for debugging (supported by those who wish to use it) \n\
   -o, --url=URL         URL of mining server\n\
   -O, --userpass=U:P    username:password pair for mining server\n\
   -u, --user=USERNAME   username for mining server\n\
@@ -484,8 +488,11 @@ struct option options[] = {
 	{ "diff-multiplier", 1, NULL, 'm' },
 	{ "diff-factor", 1, NULL, 'f' },
 	{ "diff", 1, NULL, 'f' }, // compat
+	{ "print-interval", 1, NULL, 'M' },
 	{ 0, 0, 0, 0 }
 };
+
+
 
 static char const scrypt_usage[] = "\n\
 Scrypt specific options:\n\
@@ -3747,6 +3754,18 @@ void parse_arg(int key, char *arg)
 			show_usage_and_exit(1);
 		opt_difficulty = 1.0/d;
 		break;
+
+	case 'M': { // --print-interval
+		int interval = strtol(arg, nullptr, 10);
+		if (interval <= 2 || interval > 60) {
+ 			applog(LOG_ERR, "Invalid interval %i specified. (Must be in range [2, 60])", 
+				interval);
+
+			show_usage_and_exit(1);
+		} else {
+			opt_print_interval = interval;
+		}
+	} break;
 
 	/* PER POOL CONFIG OPTIONS */
 

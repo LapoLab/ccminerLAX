@@ -526,6 +526,9 @@ struct option {
 #endif
 extern int options_count();
 
+#define OPT_PRINT_INTERVAL_UNSET -1
+extern int opt_print_interval;
+
 extern bool opt_benchmark;
 extern bool opt_debug;
 extern bool opt_quiet;
