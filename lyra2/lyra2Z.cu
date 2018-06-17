@@ -265,9 +265,14 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 			d_matrix_size = matrix_sz;
 			CUDA_SAFE_CALL(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
 			lyra2Zz_cpu_init(thr_id, throughput, d_matrix[thr_id]);
+
+		} else {
+
+			applog(LOG_ERR, "Lyra2Zz requires at least shader model 3.5 to work! Current shader model is %i. Exiting...",
+				device_sm[dev_id]);
+
+			return 0;
 		}
-		else
-			lyra2Zz_cpu_init_sm2(thr_id, throughput);
 
 		CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes()));
 
@@ -330,8 +335,9 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 			}
 			else if (vhash[7] > ptarget[7]) {
 				gpu_increment_reject(thr_id);
-				//if (!opt_quiet)	gpulog(LOG_WARNING, thr_id,
-					//"result for %08x does not validate on CPU!", work->nonces[0]);
+				if (!opt_quiet) {
+					gpulog(LOG_WARNING, thr_id, "result for %08x does not validate on CPU!", work->nonces[0]);
+				}
 				pdata[19] = work->nonces[0];
 				continue;
 			}
