@@ -183,6 +183,17 @@ do {                                                                  \
 	}                                                                 \
 } while (0)
 
+#define CUDA_SAFE_CALL_PAUSE(call)                                    \
+do {                                                                  \
+	cudaError_t err = call;                                           \
+	if (cudaSuccess != err) {                                         \
+		fprintf(stderr, "Cuda error in func '%s' at line %i : %s.\n", \
+		         __FUNCTION__, __LINE__, cudaGetErrorString(err) );   \
+		system("pause");											  \
+		exit(EXIT_FAILURE);                                           \
+	}                                                                 \
+} while (0)
+
 #define CUDA_CALL_OR_RET(call) do {                                   \
 	cudaError_t err = call;                                           \
 	if (cudaSuccess != err) {                                         \

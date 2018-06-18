@@ -1286,7 +1286,7 @@ static bool lyra2Zz_read_getblocktemplate(l2zz_internal_data *internal_data, con
 
 		//lyra2Zz_test_hash(0, NULL);
 
-		l2zz_print_info(header, merkle_root, prev_block_hash, accum);
+		//l2zz_print_info(header, merkle_root, prev_block_hash, accum);
 	}
 
 	return true;

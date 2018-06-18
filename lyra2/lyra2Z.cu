@@ -116,6 +116,47 @@ static void maybe_init_thread_data(int thr_id, int dev_id, uint32_t max_nonce, u
 	init[thr_id] = true;
 }
 
+struct target_hash {
+	uint32_t target;
+	uint32_t vhash;
+	uint32_t nonce_ret;
+	uint32_t first_nonce;
+};
+
+static std::vector<target_hash> g_targethash;
+
+static bool nonce_already_been_reported(uint32_t target, uint32_t vhash, uint32_t nonce_ret, uint32_t first_nonce)
+{
+	target_hash x;
+	x.target = target;
+	x.vhash = vhash;
+	x.nonce_ret = nonce_ret;
+	x.first_nonce = first_nonce;
+
+	for (size_t i = 0; i < g_targethash.size(); ++i) {
+		if (!memcmp(&x, &g_targethash[i], sizeof(x)))
+			return true;
+	}
+
+	g_targethash.push_back(x);
+
+	return false;
+}
+
+static void maybe_report_bad_nonce(int thr_id, uint32_t target, uint32_t vhash, uint32_t nonce_ret, uint32_t first_nonce)
+{
+	if (nonce_already_been_reported(target, vhash, nonce_ret, first_nonce))
+		return;
+
+	if (!opt_quiet)	gpulog(LOG_WARNING, thr_id,
+					"\nfirst_nonce = %08x\n"
+					"target high word = %08x\n"
+					"GPU nonce found = %08x\n"
+					"vhash high word = %08x\n"
+					"result does not validate on CPU!",
+					first_nonce, target, nonce_ret, vhash);
+}
+
 extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done)
 {
 	uint32_t *pdata = work->data;
@@ -206,8 +247,7 @@ extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce
 			}
 			else if (vhash[7] > ptarget[7]) {
 				gpu_increment_reject(thr_id);
-				if (!opt_quiet)	gpulog(LOG_WARNING, thr_id,
-					"result for %08x does not validate on CPU!", work->nonces[0]);
+				maybe_report_bad_nonce(thr_id, ptarget[7], vhash[7], work->nonces[0], pdata[19]);
 				pdata[19] = work->nonces[0];
 				continue;
 			}
@@ -259,35 +299,25 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 
 		blake256_cpu_init(thr_id, throughput);
 
-		if (device_sm[dev_id] >= 350)
+		if (device_sm[dev_id] >= 500)
 		{
 			size_t matrix_sz = device_sm[dev_id] > 500 ? sizeof(uint64_t) * 4 * 4 : sizeof(uint64_t) * 8 * 8 * 3 * 4;
 			d_matrix_size = matrix_sz;
-			CUDA_SAFE_CALL(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
+			CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
 			lyra2Zz_cpu_init(thr_id, throughput, d_matrix[thr_id]);
 
 		} else {
 
-			applog(LOG_ERR, "Lyra2Zz requires at least shader model 3.5 to work! Current shader model is %i. Exiting...",
+			applog(LOG_ERR, "Lyra2Zz requires at least shader model 5.0 to work! Current shader model is %i. Exiting...",
 				device_sm[dev_id]);
 
 			return 0;
 		}
 
-		CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes()));
+		CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes()));
 
 		init[thr_id] = true;
 	}
-
-//	for (int k=0; k < 28; k++) {
-	//	be32enc(&endiandata[k], pdata[k]);
-	//}
-	
-	//memcpy(endiandata, pdata, sizeof(endiandata));
-
-	memcpy(&ptarget[0], work->target, sizeof(work->target));
-
-	//blake256_cpu_setBlock_112(pdata);
 	
 	for (int k=0; k < 28; k++) {
 		be32enc(&endiandata[k], pdata[k]);
@@ -345,9 +375,7 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 			}
 			else if (vhash[7] > ptarget[7]) {
 				gpu_increment_reject(thr_id);
-				if (!opt_quiet) {
-					gpulog(LOG_WARNING, thr_id, "result for %08x does not validate on CPU!", work->nonces[0]);
-				}
+				maybe_report_bad_nonce(thr_id, ptarget[7], vhash[7], work->nonces[0], pdata[19]);
 				pdata[19] = work->nonces[0];
 				continue;
 			}
