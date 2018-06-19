@@ -251,7 +251,11 @@ extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce
 				gpu_increment_reject(thr_id);
 				maybe_report_bad_nonce(thr_id, ptarget[7], vhash[7], work->nonces[0], pdata[19]);
 				pdata[19] = work->nonces[0];
-				continue;
+
+				if (opt_cuda_memcheck)
+					break;
+				else
+					continue;
 			}
 		}
 
@@ -260,6 +264,9 @@ extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce
 			break;
 		}
 		pdata[19] += throughput;
+
+		if (opt_cuda_memcheck)
+			break;
 
 	} while (!work_restart[thr_id].restart);
 
@@ -380,7 +387,11 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 				gpu_increment_reject(thr_id);
 				maybe_report_bad_nonce(thr_id, ptarget[7], vhash[7], work->nonces[0], pdata[19]);
 				pdata[19] = work->nonces[0];
-				continue;
+				
+				if (opt_cuda_memcheck)
+					break;
+				else
+					continue;
 			}
 		}
 
@@ -403,6 +414,9 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 			break;
 		}
 		pdata[19] += throughput;
+
+		if (opt_cuda_memcheck)
+			break;
 
 	} while (!work_restart[thr_id].restart);
 

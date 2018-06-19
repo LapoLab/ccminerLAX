@@ -106,6 +106,8 @@ int opt_print_interval = OPT_PRINT_INTERVAL_UNSET;
 /* if unset, we just use the highest available */
 int opt_device_shader_model = OPT_DEVICE_SHADER_MODEL_UNSET;
 
+bool opt_cuda_memcheck = false;
+
 bool opt_protocol = false;
 bool opt_benchmark = false;
 bool opt_showdiff = true;
@@ -323,6 +325,7 @@ Options:\n\
 			x17         X17\n\
 			wildkeccak  Boolberry\n\
 			zr5         ZR5 (ZiftrCoin)\n\
+	  --cuda-memcheck   Run this when running under cuda's memcheck utility\n\
   -d, --devices         Comma separated list of CUDA devices to use.\n\
                         Device IDs start counting from 0! Alternatively takes\n\
                         string names of your cards like gtx780ti or gt640#2\n\
@@ -427,6 +430,7 @@ struct option options[] = {
 	{ "cpu-affinity", 1, NULL, 1020 },
 	{ "cpu-priority", 1, NULL, 1021 },
 	{ "cuda-schedule", 1, NULL, 1025 },
+	{ "cuda-memcheck", 0, NULL, 1026 },
 	{ "debug", 0, NULL, 'D' },
 	{ "help", 0, NULL, 'h' },
 	{ "intensity", 1, NULL, 'i' },
@@ -2612,6 +2616,20 @@ static void *miner_thread(void *userdata)
 			goto out;
 		}
 
+		/* cuda memcheck won't report via CTRL-C, so we have to manually force shutdown */
+		if (opt_cuda_memcheck) {
+			
+			switch (opt_algo) {
+			case ALGO_LYRA2Z:
+			case ALGO_LYRA2ZZ:
+				free_lyra2Z(thr_id);
+				break;
+			}
+			
+			applog(LOG_BLUE, "memcheck finished. Will exit now");
+			proper_exit(0);
+		}
+
 		if (opt_led_mode == LED_MODE_MINING)
 			gpu_led_off(dev_id);
 
@@ -3678,6 +3696,9 @@ void parse_arg(int key, char *arg)
 		break;
 	case 1025: // cuda-schedule
 		opt_cudaschedule = atoi(arg);
+		break;
+	case 1026:
+		opt_cuda_memcheck = true;
 		break;
 	case 1060: // max-temp
 		d = atof(arg);
