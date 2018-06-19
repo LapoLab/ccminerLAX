@@ -547,6 +547,7 @@ static bool large_test(int thr_id)
 			correct++;
 	}
 
+	CryptReleaseContext(hCryptProv, NULL);
 	return correct == num_tests;
 
 ret_crypt_error:
