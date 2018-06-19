@@ -1512,6 +1512,9 @@ bool get_work(struct thr_info *thr, struct work *work)
 			memset(&work->data[35], 0x00, 52);
 		} else if (opt_algo == ALGO_LBRY) {
 			work->data[28] = 0x80000000;
+		} else if (opt_algo == ALGO_LYRA2ZZ) { 
+			if (!lyra2Zz_benchmark_set_params(thr->id, work))
+				return false;
 		} else {
 			work->data[20] = 0x80000000;
 			work->data[31] = 0x00000280;

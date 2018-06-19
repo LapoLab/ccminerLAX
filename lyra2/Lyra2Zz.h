@@ -49,4 +49,6 @@ void lyra2Zz_make_header(
 		const uint256& accum_checkpoint,
 		const uint256& target);
 
+int lyra2Zz_benchmark_set_params(int thr_id, struct work *work);
+
 #endif // LYRA2ZZ_H_

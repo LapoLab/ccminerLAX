@@ -1632,3 +1632,60 @@ void lyra2Zz_assign_thread_nonce_range(int thr_id, struct work *work, uint32_t *
 	*min_nonce = opt_n_threads <= 1 ? nmin : nmin + base * t_id;
 	*max_nonce = opt_n_threads <= 1 ? nmax : nmin + (base * t_id) + (base - 1);
 }
+
+int lyra2Zz_benchmark_set_params(int thr_id, struct work *work)
+{
+	work->noncerange.u32[0] = 0;
+	work->noncerange.u32[1] = UINT32_MAX;
+
+	return true;
+
+#if 0
+	LPCSTR cryptname = __FUNCTION__;
+	HCRYPTPROV hCryptProv = NULL;
+
+	if (!CryptAcquireContext(&hCryptProv, cryptname, NULL, PROV_RSA_FULL, CRYPT_NEWKEYSET)) {
+		if (GetLastError() == NTE_EXISTS) {
+			if (!CryptAcquireContext(&hCryptProv, cryptname, NULL, PROV_RSA_FULL, 0)) {
+				goto bad_context;
+			}
+		} else {
+			goto bad_context;
+		}
+	} 
+
+	l2zz_header_helper_t *p_header = (l2zz_header_helper_t *) work->data;
+
+	if (!CryptGenRandom(hCryptProv, sizeof(uint256_32_t), (BYTE *)&p_header->accum_checkpoint[0])) {
+		goto bad_gen_random;	
+	}
+
+	if (!CryptGenRandom(hCryptProv, sizeof(uint256_32_t), (BYTE *)&p_header->merkle_root[0])) {
+		goto bad_gen_random;	
+	}
+
+	if (!CryptGenRandom(hCryptProv, sizeof(uint256_32_t), (BYTE *)&p_header->prev_block[0])) {
+		goto bad_gen_random;	
+	}
+
+	CryptReleaseContext(hCryptProv, NULL);
+	return true;
+
+bad_context:
+	applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "Could not get HCRYPTPROV context. Error code: 0x%x", GetLastError());
+	return false;
+
+bad_gen_random:
+	if (hCryptProv) {
+		CryptReleaseContext(hCryptProv, NULL);
+	}
+
+	applog(
+		LOG_ERR, 
+		LYRA2ZZ_LOG_HEADER "Could not randomly generate buffer work header item. Error: 0x%x\n", 
+		GetLastError()
+	);
+
+	return false;
+#endif
+}
