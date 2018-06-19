@@ -529,6 +529,9 @@ extern int options_count();
 #define OPT_PRINT_INTERVAL_UNSET -1
 extern int opt_print_interval;
 
+#define OPT_DEVICE_SHADER_MODEL_UNSET -1
+extern int opt_device_shader_model;
+
 extern bool opt_benchmark;
 extern bool opt_debug;
 extern bool opt_quiet;

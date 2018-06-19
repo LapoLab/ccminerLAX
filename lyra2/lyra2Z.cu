@@ -153,7 +153,7 @@ static void maybe_report_bad_nonce(int thr_id, uint32_t target, uint32_t vhash, 
 					"target high word = %08x\n"
 					"GPU nonce found = %08x\n"
 					"vhash high word = %08x\n"
-					"result does not validate on CPU!",
+					"result does not validate on CPU!\n",
 					first_nonce, target, nonce_ret, vhash);
 }
 
@@ -167,6 +167,8 @@ extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce
 
 	if (opt_benchmark)
 		ptarget[7] = 0x00ff;
+
+	applog(LOG_BLUE, "Device shader model: %i", device_sm[thr_id % MAX_GPUS]);
 
 	if (!init[thr_id])
 	{
@@ -276,6 +278,8 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	if (opt_benchmark)
 		ptarget[7] = 0x00ff;
 
+	gpulog(LOG_BLUE, thr_id, "Device shader model: %i", device_sm[thr_id % MAX_GPUS]);
+
 	if (!init[thr_id])
 	{
 		cudaSetDevice(dev_id);
@@ -299,8 +303,7 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 
 		blake256_cpu_init(thr_id, throughput);
 
-		if (device_sm[dev_id] >= 500)
-		{
+		if (device_sm[dev_id] >= 500) {
 			size_t matrix_sz = device_sm[dev_id] > 500 ? sizeof(uint64_t) * 4 * 4 : sizeof(uint64_t) * 8 * 8 * 3 * 4;
 			d_matrix_size = matrix_sz;
 			CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
@@ -308,7 +311,7 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 
 		} else {
 
-			applog(LOG_ERR, "Lyra2Zz requires at least shader model 5.0 to work! Current shader model is %i. Exiting...",
+			gpulog(LOG_ERR, thr_id, "Lyra2Zz requires at least shader model 5.0 to work! This device doesn't meet the requirement. Exiting...",
 				device_sm[dev_id]);
 
 			return 0;

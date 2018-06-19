@@ -16,6 +16,7 @@
 
 #include "miner.h"
 #include "nvml.h"
+#include "algos.h"
 
 #include "cuda_runtime.h"
 
@@ -66,6 +67,7 @@ void cuda_devicenames()
 
 	if (opt_n_threads)
 		GPU_N = min(MAX_GPUS, opt_n_threads);
+
 	for (int i=0; i < GPU_N; i++)
 	{
 		char vendorname[32] = { 0 };
@@ -74,6 +76,21 @@ void cuda_devicenames()
 		cudaGetDeviceProperties(&props, dev_id);
 
 		device_sm[dev_id] = (props.major * 100 + props.minor * 10);
+
+		if (opt_device_shader_model != OPT_DEVICE_SHADER_MODEL_UNSET
+			&& opt_device_shader_model < device_sm[dev_id]) {
+			device_sm[dev_id] = opt_device_shader_model;
+		} else if (opt_algo == ALGO_LYRA2ZZ) {
+			/* 
+				no need to do a hard exit if 
+				the requirements aren't met; this will implicitly
+				error out in the lyra2Z and lyra2Zz algorithm
+				implementations */ 
+			if (device_sm[dev_id] >= 500) {
+				device_sm[dev_id] = 500;
+			}
+		}
+
 		device_mpcount[dev_id] = (short) props.multiProcessorCount;
 
 		if (device_name[dev_id]) {

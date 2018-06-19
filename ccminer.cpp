@@ -103,6 +103,9 @@ bool opt_debug_threads = false;
 /* arbitrary print interval for debugging */
 int opt_print_interval = OPT_PRINT_INTERVAL_UNSET;
 
+/* if unset, we just use the highest available */
+int opt_device_shader_model = OPT_DEVICE_SHADER_MODEL_UNSET;
+
 bool opt_protocol = false;
 bool opt_benchmark = false;
 bool opt_showdiff = true;
@@ -365,6 +368,9 @@ Options:\n\
       --max-rate=N[KMG] Only mine if net hashrate is less than specified value\n\
       --max-diff=N      Only mine if net difficulty is less than specified value\n\
                         Can be tuned with --resume-diff=N to set a resume value\n\
+	  --shader-model=N  specify a specific shader model to use if it's supported. Otherwise, fall back to default.\n\
+						The syntax expects an integer such that the value is equal to major * 100 + minor * 10.\n\
+						For example, shader model 5.2 would need to be passed as --shader-model=520\n\
       --max-log-rate    Interval to reduce per gpu hashrate logs (default: 3)\n"
 #if defined(__linux) /* via nvml */
 "\
@@ -489,6 +495,7 @@ struct option options[] = {
 	{ "diff-factor", 1, NULL, 'f' },
 	{ "diff", 1, NULL, 'f' }, // compat
 	{ "print-interval", 1, NULL, 'M' },
+	{ "shader-model", 1, NULL, 1200 },
 	{ 0, 0, 0, 0 }
 };
 
@@ -3795,6 +3802,18 @@ void parse_arg(int key, char *arg)
 	case 1199:
 		pool_set_attr(cur_pooln, "disabled", arg);
 		break;
+
+	case 1200: { /* --shader-model=N */
+		long devsm = strtol(arg, nullptr, 10);
+
+		if (devsm < 100 || devsm > 1000) {
+			applog(LOG_WARNING, "--shader-model argument is invalid. Range must fall within [100, 1000].");
+			return;
+		} 
+
+		opt_device_shader_model = devsm;
+
+	}	break;
 
 	case 'V':
 		show_version_and_exit();
