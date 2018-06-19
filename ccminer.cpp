@@ -3761,13 +3761,12 @@ void parse_arg(int key, char *arg)
 	case 'M': { // --print-interval
 		int interval = strtol(arg, nullptr, 10);
 		if (interval <= 2 || interval > 60) {
- 			applog(LOG_ERR, "Invalid interval %i specified. (Must be in range [2, 60])", 
+ 			applog(LOG_WARNING, "Invalid interval %i specified. (Must be in range [2, 60])", 
 				interval);
-
-			show_usage_and_exit(1);
-		} else {
-			opt_print_interval = interval;
+			return;
 		}
+		opt_print_interval = interval;
+		
 	} break;
 
 	/* PER POOL CONFIG OPTIONS */
