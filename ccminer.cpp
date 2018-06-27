@@ -2401,9 +2401,10 @@ static void *miner_thread(void *userdata)
 		gettimeofday(&tv_start, NULL);
 
 		// check (and reset) previous errors
-		cudaError_t err = cudaGetLastError();
-		if (err != cudaSuccess && !opt_quiet)
+		volatile cudaError_t err = cudaGetLastError();
+		if (err != cudaSuccess && !opt_quiet) {
 			gpulog(LOG_WARNING, thr_id, "%s", cudaGetErrorString(err));
+		}
 
 		work.valid_nonces = 0;
 

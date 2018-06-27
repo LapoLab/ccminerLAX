@@ -561,6 +561,7 @@ static json_t *json_rpc_call(CURL *curl, const char *url,
 	res_val = json_object_get(val, "result");
 	err_val = json_object_get(val, "error");
 
+	json_int_t i_err_code = 0;
 	if (!res_val || json_is_null(res_val) ||
 	    (err_val && !json_is_null(err_val))) {
 		char *s = NULL;
@@ -571,6 +572,8 @@ static json_t *json_rpc_call(CURL *curl, const char *url,
 			json_t *err_code = json_object_get(err_val, "code");
 			if (curl_err && json_integer_value(err_code))
 				*curl_err = (int) json_integer_value(err_code);
+
+			i_err_code = json_integer_value(err_code);
 
 			if (json_is_string(msg)) {
 				free(s);
@@ -586,8 +589,11 @@ static json_t *json_rpc_call(CURL *curl, const char *url,
 		else
 			s = strdup("(unknown reason)");
 
-		if (!curl_err || opt_debug)
-			applog(LOG_ERR, "JSON-RPC call failed: %s", s);
+		/* s can be null; this may or may not be caught by the log function. */
+		if (s && (!curl_err || (opt_debug && i_err_code != 0))) {
+			applog(LOG_ERR, "JSON-RPC call failed: %s. Error code: 0x%x", s, i_err_code);
+			applog(LOG_INFO, "B. curl_err: 0x%x. opt_debug: 0x%x", curl_err, opt_debug);
+		}
 
 		free(s);
 
