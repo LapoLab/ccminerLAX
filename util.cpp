@@ -592,7 +592,6 @@ static json_t *json_rpc_call(CURL *curl, const char *url,
 		/* s can be null; this may or may not be caught by the log function. */
 		if (s && (!curl_err || (opt_debug && i_err_code != 0))) {
 			applog(LOG_ERR, "JSON-RPC call failed: %s. Error code: 0x%x", s, i_err_code);
-			applog(LOG_INFO, "B. curl_err: 0x%x. opt_debug: 0x%x", curl_err, opt_debug);
 		}
 
 		free(s);
