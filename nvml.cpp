@@ -24,6 +24,7 @@
 #include "miner.h"
 #include "nvml.h"
 #include "cuda_runtime.h"
+#include "cuda_helper.h"
 
 #ifdef USE_WRAPNVML
 
@@ -287,7 +288,8 @@ nvml_handle * nvml_create()
 		cudaDeviceProp props;
 		nvmlh->cuda_nvml_device_id[i] = -1;
 
-		if (cudaGetDeviceProperties(&props, i) == cudaSuccess) {
+		cudaError_t err;
+		if ((err = cudaGetDeviceProperties(&props, i)) == cudaSuccess) {
 			device_bus_ids[i] = props.pciBusID;
 			for (int j = 0; j < nvmlh->nvml_gpucount; j++) {
 				if ((nvmlh->nvml_pci_domain_id[j] == (uint32_t) props.pciDomainID) &&
@@ -300,6 +302,9 @@ nvml_handle * nvml_create()
 					nvmlh->cuda_nvml_device_id[i] = j;
 				}
 			}
+		} else {
+			gpulog(LOG_WARNING, i, "[nvml_create:%i]. cudaGetDeviceProperties returned error %s",
+				__line__, cudaGetErrorString(err));
 		}
 	}
 
@@ -1669,7 +1674,7 @@ int nvapi_set_gpuclock(unsigned int devNum, uint32_t clock)
 	ret = NvAPI_GPU_GetBusId(phys[devNum], &busId);
 	for (int d=0; d < (int) nvapi_dev_cnt; d++) {
 		 // unsure about devNum, so be safe
-		cudaGetDeviceProperties(&props, d);
+		CUDA_SAFE_CALL_PAUSE(cudaGetDeviceProperties(&props, d));
 		if (props.pciBusID == busId) {
 			delta = (clock * 1000) - props.clockRate;
 			break;
@@ -1798,8 +1803,11 @@ int nvapi_init()
 
 	for (int g = 0; g < num_gpus; g++) {
 		cudaDeviceProp props;
-		if (cudaGetDeviceProperties(&props, g) == cudaSuccess) {
+		cudaError_t err;
+		if ((err = cudaGetDeviceProperties(&props, g)) == cudaSuccess) {
 			device_bus_ids[g] = props.pciBusID;
+		} else {
+			gpulog(LOG_WARNING, g, "[nvml_create:%i]. cudaGetDeviceProperties returned error %s", __line__, cudaGetErrorString(err));
 		}
 		nvapi_dev_map[g] = g; // default mapping
 	}
@@ -2201,7 +2209,8 @@ void *monitor_thread(void *userdata)
 		// This thread monitors card's power lazily during scans, one at a time...
 		thr_id = (thr_id + 1) % opt_n_threads;
 		struct cgpu_info *cgpu = &thr_info[thr_id].gpu;
-		int dev_id = cgpu->gpu_id; cudaSetDevice(dev_id);
+		int dev_id = cgpu->gpu_id; 
+		CUDA_SAFE_CALL_PAUSE(cudaSetDevice(dev_id));
 
 		if (hnvml != NULL && cgpu)
 		{

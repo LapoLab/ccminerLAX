@@ -12,6 +12,7 @@ extern "C" {
 #include "cuda_helper.h"
 
 #include <memory.h>
+#include <stdio.h>
 
 #ifdef __INTELLISENSE__
 /* just for vstudio code colors */
@@ -677,15 +678,15 @@ void blake256_cpu_setBlock_112(uint32_t *pdata)
 	memcpy(h, c_IV256, sizeof(c_IV256));
 	blake256_compress1st(h, pdata, 512);
 
-	cudaMemcpyToSymbol(cpu_h, h, sizeof(h), 0, cudaMemcpyHostToDevice);
-	cudaMemcpyToSymbol(c_data_112, &data[16], sizeof(c_data_112), 0, cudaMemcpyHostToDevice);
+	CUDA_SAFE_CALL_PAUSE(cudaMemcpyToSymbol(cpu_h, h, sizeof(h), 0, cudaMemcpyHostToDevice));
+	CUDA_SAFE_CALL_PAUSE(cudaMemcpyToSymbol(c_data_112, &data[16], sizeof(c_data_112), 0, cudaMemcpyHostToDevice));
 }
 
 __host__
 void blake256_cpu_init(int thr_id, uint32_t threads)
 {
-	cudaMemcpyToSymbol(u256, c_u256, sizeof(c_u256), 0, cudaMemcpyHostToDevice);
-	cudaMemcpyToSymbol(sigma, c_sigma, sizeof(c_sigma), 0, cudaMemcpyHostToDevice);
+	CUDA_SAFE_CALL_PAUSE(cudaMemcpyToSymbol(u256, c_u256, sizeof(c_u256), 0, cudaMemcpyHostToDevice));
+	CUDA_SAFE_CALL_PAUSE(cudaMemcpyToSymbol(sigma, c_sigma, sizeof(c_sigma), 0, cudaMemcpyHostToDevice));
 }
 
 /** for lyra2v2 **/

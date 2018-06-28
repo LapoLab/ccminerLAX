@@ -172,10 +172,10 @@ extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce
 
 	if (!init[thr_id])
 	{
-		cudaSetDevice(dev_id);
+		CUDA_SAFE_CALL(cudaSetDevice(dev_id));
 		if (opt_cudaschedule == -1 && gpu_threads == 1) {
-			cudaDeviceReset();
-			cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
+			CUDA_SAFE_CALL(cudaDeviceReset());
+			CUDA_SAFE_CALL(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
 			CUDA_LOG_ERROR();
 		}
 
@@ -289,10 +289,10 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 
 	if (!init[thr_id])
 	{
-		cudaSetDevice(dev_id);
+		CUDA_SAFE_CALL_PAUSE(cudaSetDevice(dev_id));
 		if (opt_cudaschedule == -1 && gpu_threads == 1) {
-			cudaDeviceReset();
-			cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
+			CUDA_SAFE_CALL_PAUSE(cudaDeviceReset());
+			CUDA_SAFE_CALL_PAUSE(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
 			CUDA_LOG_ERROR();
 		}
 
@@ -303,7 +303,7 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 		if (init[thr_id]) throughput = min(throughput, max_nonce - first_nonce);
 
 		cudaDeviceProp props;
-		cudaGetDeviceProperties(&props, dev_id);
+		CUDA_SAFE_CALL_PAUSE(cudaGetDeviceProperties(&props, dev_id));
 		gtx750ti = (strstr(props.name, "750 Ti") != NULL);
 
 		gpulog(LOG_INFO, thr_id, "Intensity set to %g, %u cuda threads", throughput2intensity(throughput), throughput);

@@ -132,24 +132,24 @@ __host__
 void lyra2Zz_cpu_init(int thr_id, uint32_t threads, uint64_t *d_matrix)
 {
 	// just assign the device pointer allocated in main loop
-	cudaMemcpyToSymbol(l2ZZ::DMatrix, &d_matrix, sizeof(uint64_t*), 0, cudaMemcpyHostToDevice);
-	cudaMalloc(&d_GNonces[thr_id], 2 * sizeof(uint32_t));
-	cudaMallocHost(&h_GNonces[thr_id], 2 * sizeof(uint32_t));
+	CUDA_SAFE_CALL_PAUSE(cudaMemcpyToSymbol(l2ZZ::DMatrix, &d_matrix, sizeof(uint64_t*), 0, cudaMemcpyHostToDevice));
+	CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_GNonces[thr_id], 2 * sizeof(uint32_t)));
+	CUDA_SAFE_CALL_PAUSE(cudaMallocHost(&h_GNonces[thr_id], 2 * sizeof(uint32_t)));
 }
 
 __host__
 void lyra2Zz_cpu_init_sm2(int thr_id, uint32_t threads)
 {
 	// just assign the device pointer allocated in main loop
-	cudaMalloc(&d_GNonces[thr_id], 2 * sizeof(uint32_t));
-	cudaMallocHost(&h_GNonces[thr_id], 2 * sizeof(uint32_t));
+	CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_GNonces[thr_id], 2 * sizeof(uint32_t)));
+	CUDA_SAFE_CALL_PAUSE(cudaMallocHost(&h_GNonces[thr_id], 2 * sizeof(uint32_t)));
 }
 
 __host__
 void lyra2Zz_cpu_free(int thr_id)
 {
-	cudaFree(d_GNonces[thr_id]);
-	cudaFreeHost(h_GNonces[thr_id]);
+	CUDA_SAFE_CALL_PAUSE(cudaFree(d_GNonces[thr_id]));
+	CUDA_SAFE_CALL_PAUSE(cudaFreeHost(h_GNonces[thr_id]));
 }
 
 __host__
@@ -157,7 +157,7 @@ uint32_t lyra2Zz_getSecNonce(int thr_id, int num)
 {
 	uint32_t results[2];
 	memset(results, 0xFF, sizeof(results));
-	cudaMemcpy(results, d_GNonces[thr_id], sizeof(results), cudaMemcpyDeviceToHost);
+	CUDA_SAFE_CALL_PAUSE(cudaMemcpy(results, d_GNonces[thr_id], sizeof(results), cudaMemcpyDeviceToHost));
 	if (results[1] == results[0])
 		return UINT32_MAX;
 	return results[num];
@@ -166,14 +166,14 @@ uint32_t lyra2Zz_getSecNonce(int thr_id, int num)
 __host__
 void lyra2Zz_setTarget(const void *pTargetIn)
 {
-	cudaMemcpyToSymbol(l2ZZ::pTarget, pTargetIn, 32, 0, cudaMemcpyHostToDevice);
+	CUDA_SAFE_CALL_PAUSE(cudaMemcpyToSymbol(l2ZZ::pTarget, pTargetIn, 32, 0, cudaMemcpyHostToDevice));
 }
 
 __host__
 uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce, uint64_t *d_hash0, bool gtx750ti)
 {
 	uint32_t result = UINT32_MAX;
-	cudaMemset(d_GNonces[thr_id], 0xff, 2 * sizeof(uint32_t));
+	CUDA_SAFE_CALL_PAUSE(cudaMemset(d_GNonces[thr_id], 0xff, 2 * sizeof(uint32_t)));
 	int dev_id = device_map[thr_id % MAX_GPUS];
 
 	uint32_t tpb = TPB52;
@@ -210,7 +210,7 @@ uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce,
 	}
 
 	// get first found nonce
-	cudaMemcpy(h_GNonces[thr_id], d_GNonces[thr_id], 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+	CUDA_SAFE_CALL_PAUSE(cudaMemcpy(h_GNonces[thr_id], d_GNonces[thr_id], 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost));
 	result = *h_GNonces[thr_id];
 
 	return result;

@@ -208,7 +208,8 @@ int nvs_init()
 	for (int i = 0; i < n_threads; i++) {
 		int dev_id = device_map[i % MAX_GPUS];
 		cudaDeviceProp props;
-		if (cudaGetDeviceProperties(&props, dev_id) == cudaSuccess) {
+		cudaError_t err;
+		if ((err = cudaGetDeviceProperties(&props, dev_id)) == cudaSuccess) {
 			for (int8_t d = 0; d < x_devices; d++) {
 				if (nvs_bus_ids[d] == (uint8_t) props.pciBusID) {
 					gpulog(LOG_DEBUG, i, "matches X gpu:%d by busId %u",
@@ -220,6 +221,8 @@ int nvs_init()
 					break;
 				}
 			}
+		} else {
+			gpulog(LOG_WARNING, i, "[nvs_init:%i] cudaGetDeviceProperties returned: %s", __line__, cudaGetErrorString(err));
 		}
 	}
 	return 0;

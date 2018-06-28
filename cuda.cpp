@@ -19,6 +19,7 @@
 #include "algos.h"
 
 #include "cuda_runtime.h"
+#include "cuda_helper.h"
 
 #ifdef __cplusplus
 /* miner.h functions are declared in C type, not C++ */
@@ -73,7 +74,7 @@ void cuda_devicenames()
 		char vendorname[32] = { 0 };
 		int dev_id = device_map[i];
 		cudaDeviceProp props;
-		cudaGetDeviceProperties(&props, dev_id);
+		CUDA_SAFE_CALL_PAUSE(cudaGetDeviceProperties(&props, dev_id));
 
 		device_sm[dev_id] = (props.major * 100 + props.minor * 10);
 
@@ -117,7 +118,7 @@ void cuda_print_devices()
 	for (int n=0; n < ngpus; n++) {
 		int dev_id = device_map[n % MAX_GPUS];
 		cudaDeviceProp props;
-		cudaGetDeviceProperties(&props, dev_id);
+		CUDA_SAFE_CALL_PAUSE(cudaGetDeviceProperties(&props, dev_id));
 		if (!opt_n_threads || n < opt_n_threads) {
 			fprintf(stderr, "GPU #%d: SM %d.%d %s @ %.0f MHz (MEM %.0f)\n", dev_id,
 				props.major, props.minor, device_name[dev_id],
@@ -141,7 +142,7 @@ void cuda_shutdown()
 	// require gpu init first
 	//if (thr_info != NULL)
 	//	cudaDeviceSynchronize();
-	cudaDeviceReset();
+	CUDA_SAFE_CALL_PAUSE(cudaDeviceReset());
 }
 
 static bool substringsearch(const char *haystack, const char *needle, int &match)
@@ -173,8 +174,12 @@ int cuda_finddevice(char *name)
 	for (int i=0; i < num; ++i)
 	{
 		cudaDeviceProp props;
-		if (cudaGetDeviceProperties(&props, i) == cudaSuccess)
-			if (substringsearch(props.name, name, match)) return i;
+		if (cudaGetDeviceProperties(&props, i) == cudaSuccess) {
+			if (substringsearch(props.name, name, match)) 
+				return i;
+		} else {
+			gpulog(LOG_WARNING, i, "[cuda_finddevice] cudaDeviceProperties for thread %i returned 0x%x", i, cudaGetLastError());
+		}
 	}
 	return -1;
 }
@@ -209,7 +214,7 @@ double throughput2intensity(uint32_t throughput)
 void cuda_reset_device(int thr_id, bool *init)
 {
 	int dev_id = device_map[thr_id % MAX_GPUS];
-	cudaSetDevice(dev_id);
+	CUDA_SAFE_CALL_PAUSE(cudaSetDevice(dev_id));
 	if (init != NULL) {
 		// with init array, its meant to be used in algo's scan code...
 		for (int i=0; i < MAX_GPUS; i++) {
@@ -219,17 +224,17 @@ void cuda_reset_device(int thr_id, bool *init)
 		}
 		// force exit from algo's scan loops/function
 		restart_threads();
-		cudaDeviceSynchronize();
+		CUDA_SAFE_CALL_PAUSE(cudaDeviceSynchronize());
 		while (cudaStreamQuery(NULL) == cudaErrorNotReady)
 			usleep(1000);
 	}
 	cudaDeviceReset();
 	if (opt_cudaschedule >= 0) {
-		cudaSetDeviceFlags((unsigned)(opt_cudaschedule & cudaDeviceScheduleMask));
+		CUDA_SAFE_CALL_PAUSE(cudaSetDeviceFlags((unsigned)(opt_cudaschedule & cudaDeviceScheduleMask)));
 	} else {
-		cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
+		CUDA_SAFE_CALL_PAUSE(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
 	}
-	cudaDeviceSynchronize();
+	CUDA_SAFE_CALL_PAUSE(cudaDeviceSynchronize());
 }
 
 // return free memory in megabytes
@@ -244,7 +249,7 @@ int cuda_available_memory(int thr_id)
 #else
 	size_t mtotal = 0, mfree = 0;
 	cudaSetDevice(dev_id);
-	cudaDeviceSynchronize();
+	CUDA_SAFE_CALL_PAUSE(cudaDeviceSynchronize());
 	cudaMemGetInfo(&mfree, &mtotal);
 	return (int) (mfree / (1024 * 1024));
 #endif
@@ -271,7 +276,8 @@ void cuda_clear_lasterror()
 int cuda_gpu_info(struct cgpu_info *gpu)
 {
 	cudaDeviceProp props;
-	if (cudaGetDeviceProperties(&props, gpu->gpu_id) == cudaSuccess) {
+	cudaError_t err;
+	if ((err = cudaGetDeviceProperties(&props, gpu->gpu_id)) == cudaSuccess) {
 		gpu->gpu_clock = (uint32_t) props.clockRate;
 		gpu->gpu_memclock = (uint32_t) props.memoryClockRate;
 		gpu->gpu_mem = (uint64_t) (props.totalGlobalMem / 1024); // kB
@@ -281,6 +287,8 @@ int cuda_gpu_info(struct cgpu_info *gpu)
 #endif
 		gpu->gpu_mem = gpu->gpu_mem / 1024; // MB
 		return 0;
+	} else {
+		gpulog(LOG_WARNING, gpu->gpu_id, "[cuda_gpu_info]. cudaError: %s", cudaGetErrorString(err));
 	}
 	return -1;
 }
@@ -302,7 +310,9 @@ cudaError_t MyStreamSynchronize(cudaStream_t stream, int situation, int thr_id)
 
 		double tsync = 0.0;
 		double tsleep = 0.95 * tsum[situation].value[thr_id];
-		if (cudaStreamQuery(stream) == cudaErrorNotReady)
+
+		cudaError_t err = cudaStreamQuery(stream);
+		if (err == cudaErrorNotReady)
 		{
 			usleep((useconds_t)(1e6*tsleep));
 			struct timeval tv_start, tv_end;
@@ -311,6 +321,12 @@ cudaError_t MyStreamSynchronize(cudaStream_t stream, int situation, int thr_id)
 			gettimeofday(&tv_end, NULL);
 			tsync = 1e-6 * (tv_end.tv_usec-tv_start.tv_usec) + (tv_end.tv_sec-tv_start.tv_sec);
 		}
+		else if (err != cudaSuccess)
+		{
+			const char *errstr = cudaGetErrorString(err);
+			gpulog(LOG_WARNING, thr_id, "[MyStreamSynchronize] cudaStreamQuery returned %s", errstr);
+		}
+
 		if (tsync >= 0) tsum[situation].value[thr_id] = a * tsum[situation].value[thr_id] + b * (tsleep+tsync);
 	}
 	else
