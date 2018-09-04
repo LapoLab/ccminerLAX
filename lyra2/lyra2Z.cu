@@ -338,13 +338,18 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	
 	lyra2Zz_setTarget(ptarget);
 
-	__time64_t debug_interval_start = _time64(NULL);
+	__time64_t debug_interval_start = 0; 
 
+	const bool time_hash_iter = opt_debug && opt_print_interval != OPT_PRINT_INTERVAL_UNSET;
+
+	if (time_hash_iter)
+		debug_interval_start = _time64(NULL);
 
 	do {
 		struct timeval hash_time, start_iter, end_hash;
 
-		gettimeofday(&start_iter, NULL);
+		if (time_hash_iter)
+			gettimeofday(&start_iter, NULL);
 
 		int order = 0;
 
@@ -354,8 +359,10 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 
 		work->nonces[0] = lyra2Zz_cpu_hash_32(thr_id, throughput, pdata[19], d_hash[thr_id], gtx750ti);
 		
-		gettimeofday(&end_hash, NULL);
-		timeval_subtract(&hash_time, &end_hash, &start_iter);
+		if (time_hash_iter) {
+			gettimeofday(&end_hash, NULL);
+			timeval_subtract(&hash_time, &end_hash, &start_iter);
+		}
 		
 		if (work->nonces[0] != UINT32_MAX)
 		{
@@ -395,9 +402,9 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 			}
 		}
 
-		__time64_t test_time = _time64(NULL);
-
-		if (opt_debug && opt_print_interval != OPT_PRINT_INTERVAL_UNSET) {
+		if (time_hash_iter) {
+			__time64_t test_time = _time64(NULL);
+			
 			if (test_time - debug_interval_start >= opt_print_interval) {
 				double dtime = (double) hash_time.tv_sec + 1e-6 * (double) hash_time.tv_usec;
 				applog(

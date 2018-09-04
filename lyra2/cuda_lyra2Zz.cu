@@ -192,12 +192,16 @@ uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce,
 	dim3 grid3((threads + tpb - 1) / tpb);
 	dim3 block3(tpb);
 	
+	const bool alotmore = false;
+
 	{
 		size_t shared_mem = 0;
 
 		if (gtx750ti)
 			// suitable amount to adjust for 8warp
 			shared_mem = 8192;
+		else if (alotmore)
+			shared_mem = 24 * (8 - 0) * sizeof(uint2) * tpb;
 		else
 			// suitable amount to adjust for 10warp
 			shared_mem = 6144;
