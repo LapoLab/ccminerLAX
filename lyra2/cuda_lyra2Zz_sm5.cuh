@@ -880,11 +880,11 @@ void lyra2Zz_gpu_hash_32_3_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_
 
 		uint32_t nonce = startNounce + thread;
 		if (((uint64_t*)state)[3] <= ((uint64_t*)pTarget)[3]) {
-			printf("\nMatch:\n"
-					"nonce: 0x%X\n"
-					"thread: 0x%X\n"
-					"startNounce: 0x%X\n", 
-					nonce, thread, startNounce);
+//			printf("\nMatch:\n"
+//					"nonce: 0x%X\n"
+//					"thread: 0x%X\n"
+//					"startNounce: 0x%X\n", 
+//					nonce, thread, startNounce);
 
  			atomicMin(&resNonces[1], resNonces[0]);
 			atomicMin(&resNonces[0], nonce);
