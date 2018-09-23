@@ -631,7 +631,7 @@ extern "C" void free_lyra2Z(int thr_id)
 
 static bool test_hash(int thr_id, uint32_t *input28)
 {
-	uint32_t start_n = input28[19];
+	size_t start_n = ((size_t)input28[19]) & 0xFFFFFFFF;
 
 	uint32_t adata[28];
 
@@ -720,7 +720,7 @@ static bool large_test(int thr_id)
 	HCRYPTPROV hCryptProv = NULL;
 
 	if (!CryptAcquireContext(&hCryptProv, cryptname, NULL, PROV_RSA_FULL, CRYPT_NEWKEYSET)) {
-		if (GetLastError() == NTE_EXISTS) {
+		if (GetLastError() == (DWORD)NTE_EXISTS) {
 			if (!CryptAcquireContext(&hCryptProv, cryptname, NULL, PROV_RSA_FULL, 0))
 				goto ret_crypt_error;
 		} else {
@@ -753,9 +753,9 @@ static bool large_test(int thr_id)
 ret_crypt_error:
 	applog(LOG_ERR, __FUNCTION__ " Could not get windows cryptography context - error returned: 0x%x\n", GetLastError());
 		return false;
-#endif
-
+#else
 	return false;
+#endif
 }
 
 extern "C" int lyra2Zz_test_hash(int thr_id, uint32_t *block_data)
