@@ -2,6 +2,7 @@
 #define LYRA2ZZ_H_
 
 #include <stdint.h>
+#include <string.h>
 #include "curl\curl.h"
 
 #define LYRA2ZZ_BLOCK_HEADER_LEN_BYTES 112
@@ -11,21 +12,26 @@
 
 #define LYRA2ZZ_LOG_HEADER __func__ " lyra2zz - "
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef uint32_t uint256_32_t[8];
+typedef uint32_t lyra2zz_header_data_t[LYRA2ZZ_BLOCK_HEADER_UINT32_LEN];
 
 typedef struct lyra2zz_block_header {
 	uint256_32_t block_hash;
 	uint256_32_t target_decoded;
 	
-	uint8_t *byte_view; /* points to data (used for debugging */
+	uint8_t *byte_view; /* points to data (used for debugging) */
 	
 	uint32_t min_nonce;
 	uint32_t max_nonce;
 
-	/* main header data */
-	uint32_t data[LYRA2ZZ_BLOCK_HEADER_UINT32_LEN];
+	lyra2zz_header_data_t data;
 
 } lyra2zz_block_header_t;
+
 
 class uint256;
 struct json_t;
@@ -50,5 +56,9 @@ void lyra2Zz_make_header(
 		const uint256& target);
 
 int lyra2Zz_benchmark_set_params(int thr_id, struct work *work);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // LYRA2ZZ_H_

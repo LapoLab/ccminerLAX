@@ -924,9 +924,6 @@ public:
 	}
 };
 
-static pthread_mutex_t g_internal_mut = PTHREAD_MUTEX_INITIALIZER;
-static std::unique_ptr<l2zz_internal_data> g_internal_data(new l2zz_internal_data());
-
 extern "C" int lyra2Zz_test_hash(int thr_id, uint32_t *block_data);
 
 static inline std::string l2zz_gbt_get_jstring(const json_t* blocktemplate, const char* key)
@@ -1584,7 +1581,7 @@ int lyra2Zz_gbt_work_decode(CURL *curl, const json_t *val, struct work *work)
 
 	/* copy over header info */
 	{
-		register struct work *w = work;
+		struct work *w = work;
 
 		w->noncerange.u32[0] = header.min_nonce;
 		w->noncerange.u32[1] = header.max_nonce;
@@ -1595,9 +1592,11 @@ int lyra2Zz_gbt_work_decode(CURL *curl, const json_t *val, struct work *work)
 
 	/* copy over transaction info */
 	{
-		register std::vector<uint8_t> *txs = &internal_data->transactions[0];
-		register struct lyratx *wtxs = &work->lyratxs[0];
-		register size_t len = internal_data->transactions.size();
+		std::vector<uint8_t> *txs = &internal_data->transactions[0];
+		struct lyratx *wtxs = &work->lyratxs[0];
+		size_t len = internal_data->transactions.size();
+
+		memset(wtxs, 0, sizeof(work->lyratxs));
 
 		for (size_t i = 0; i < len; ++i) {
 			if (txs[i].size() > LYRA_MAX_TX_SZ) {
