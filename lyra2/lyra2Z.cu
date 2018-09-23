@@ -5,8 +5,11 @@ extern "C" {
 #include "Lyra2Z.h"
 }
 
+#include "Lyra2Zz.h"
+
 #include <miner.h>
 #include <cuda_helper.h>
+#include <memory>
 
 static uint64_t* d_hash[MAX_GPUS];
 static uint64_t* d_matrix[MAX_GPUS];
@@ -33,6 +36,9 @@ extern uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t start
 
 extern void lyra2Zz_setTarget(const void *ptarget);
 extern uint32_t lyra2Zz_getSecNonce(int thr_id, int num);
+
+extern bool get_work(struct thr_info *thr, struct work *work);
+
 /*
 extern "C" void lyra2Z_hash(void *state, const void *input)
 {
@@ -274,6 +280,165 @@ extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce
 	return 0;
 }
 
+class l2zz_update_timer {
+public:
+	struct timeval interval_start;
+	long interval_amt_usec;
+
+	l2zz_update_timer(long amt_msec)
+		:	interval_amt_usec(amt_msec * 1000)
+	{
+		gettimeofday(&interval_start, nullptr);
+	}
+
+	long to_usec(struct timeval *in) const
+	{
+		return in->tv_sec * 1000000 + in->tv_usec;
+	}
+
+	bool query()
+	{
+		struct timeval test;
+		gettimeofday(&test, nullptr);
+
+		struct timeval diff_res;
+		bool neg = timeval_subtract(&diff_res, &test, &interval_start);
+		long diff_usec = to_usec(&diff_res);
+		bool r = diff_usec >= interval_amt_usec && !neg; 
+
+		interval_start.tv_sec = r ? test.tv_sec : interval_start.tv_sec;
+		interval_start.tv_usec = r ? test.tv_usec : interval_start.tv_usec;
+
+		return r;
+	}
+};
+
+#define L2ZZ_LOGSTR_SIZE (sizeof(char) * ((LYRA2ZZ_BLOCK_HEADER_LEN_BYTES << 1) + 1))
+
+class l2zz_staleblock_query 
+{
+public:
+	struct work * work_cmp[MAX_GPUS];
+	char * str_work_data[MAX_GPUS];
+	char * str_work_data_cmp[MAX_GPUS];
+	l2zz_update_timer * timers[MAX_GPUS];
+
+	l2zz_staleblock_query(void)
+	{
+		memset(work_cmp, 0, sizeof(work_cmp));
+		memset(str_work_data, 0, sizeof(str_work_data));
+		memset(str_work_data_cmp, 0, sizeof(str_work_data_cmp));
+		memset(timers, 0, sizeof(timers));
+	}
+
+	~l2zz_staleblock_query(void)
+	{
+		for (int i = 0; i < opt_n_threads; ++i)
+			if (i < MAX_GPUS)
+				destroy(i);
+	}
+
+	bool valid(int thr_id) const
+	{
+		return str_work_data[thr_id] && str_work_data_cmp[thr_id] && work_cmp[thr_id] && timers[thr_id];
+	}
+
+	bool init(int thr_id)
+	{
+		bool log = !valid(thr_id) && !opt_quiet && opt_debug;
+
+		if (!timers[thr_id]) {
+			timers[thr_id] = new l2zz_update_timer(30000);
+		}
+
+		maybe_try_aligned_calloc_or_retfalse(work_cmp[thr_id], struct work, sizeof (struct work));
+		maybe_try_bzalloc_or_retfalse(str_work_data[thr_id], char, L2ZZ_LOGSTR_SIZE);
+		maybe_try_bzalloc_or_retfalse(str_work_data_cmp[thr_id], char, L2ZZ_LOGSTR_SIZE);
+
+		if (log) {
+			applog(LOG_DEBUG, LYRA2ZZ_LOG_HEADER "[%i] memory allocated", thr_id);
+		}
+
+		return true;
+	}
+
+	void destroy(int thr_id)
+	{
+		safe_aligned_free(work_cmp[thr_id]);
+		safe_free(str_work_data[thr_id]);
+		safe_free(str_work_data_cmp[thr_id]);
+
+		if (timers[thr_id]) {
+			delete timers[thr_id];
+			timers[thr_id] = nullptr;
+		}
+
+		applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "[%i] freed memory", thr_id);
+	}
+
+	bool stale_block_check(int thr_id, struct work * curr_work)
+	{
+		if (!valid(thr_id))
+			return false;
+
+		struct work * wcmp = work_cmp[thr_id];
+
+		if (timers[thr_id]->query()) {
+			bool did_succeed = get_work(&thr_info[thr_id], wcmp);
+			bool cmp_diff = did_succeed && memcmp(curr_work->data + 1, wcmp->data + 1, 32) != 0;
+
+			bool txupdate = false;
+
+			if (!cmp_diff) {
+				cmp_diff = did_succeed && memcmp(curr_work->lyratxs, wcmp->lyratxs, sizeof(curr_work->lyratxs)) != 0;
+				txupdate = cmp_diff;
+			}
+
+			if (!opt_quiet) {
+				if (cmp_diff) {
+					if (txupdate) {
+						applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "[%i] New transaction information received. Restarting...", thr_id);
+					} else {
+						char * swd = str_work_data[thr_id];
+						char * swcd = str_work_data_cmp[thr_id];
+
+						memset(swd, 0, L2ZZ_LOGSTR_SIZE);
+						memset(swcd, 0, L2ZZ_LOGSTR_SIZE);
+
+						cbin2hex(swd, (const char *)(&curr_work->data[1]), 32);
+						chexrev(swd);
+
+						cbin2hex(swcd, (const char *)(&wcmp->data[1]), 32);
+						chexrev(swcd);
+
+						applog(
+							LOG_INFO,
+							LYRA2ZZ_LOG_HEADER "\n\n[%i] New Header\n"
+							"\tReplacing: %s\n"
+							"\tWith: %s\n", 
+							thr_id, swd, swcd
+						);
+					}
+				} else if (did_succeed) {
+					applog(
+						LOG_INFO,
+						LYRA2ZZ_LOG_HEADER  
+						"[%i] No change detected yet...", thr_id
+					);
+				} else {
+					applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "[%i] get_work failed...", thr_id);
+				}
+			}
+
+			return cmp_diff;
+		}
+
+		return false;
+	}
+};
+
+static std::unique_ptr<l2zz_staleblock_query> g_staleblock_query(nullptr);
+
 extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done)
 {
 	uint32_t *pdata = work->data;
@@ -281,6 +446,9 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	uint32_t _ALIGN(64) endiandata[28];
 	const uint32_t first_nonce = pdata[19];
 	int dev_id = device_map[thr_id];
+
+	if (!g_staleblock_query.get())
+		g_staleblock_query.reset(new l2zz_staleblock_query());
 
 	if (opt_benchmark)
 		ptarget[7] = 0x00ff;
@@ -345,7 +513,16 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	if (time_hash_iter)
 		debug_interval_start = _time64(NULL);
 
+	if (!g_staleblock_query->init(thr_id)) {
+		applog(LOG_WARNING, "[%i] could not allocate stale block check memory!", thr_id);
+	}
+
 	do {
+		if (g_staleblock_query->stale_block_check(thr_id, work)) {
+			restart_thread(thr_id);
+			break;
+		}
+
 		struct timeval hash_time, start_iter, end_hash;
 
 		if (time_hash_iter)
@@ -388,6 +565,7 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 					}
 					pdata[19] = max(work->nonces[0], work->nonces[1]) + 1; // cursor
 				}
+
 				return work->valid_nonces;
 			}
 			else if (vhash[7] > ptarget[7]) {
@@ -428,6 +606,7 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	} while (!work_restart[thr_id].restart);
 
 	*hashes_done = pdata[19] - first_nonce;
+	
 	return 0;
 }
 
