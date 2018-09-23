@@ -249,8 +249,38 @@ static inline void le16enc(void *pp, uint16_t x)
 #endif
 
 /* used for struct work */
+
+#ifdef USE_SAFE_ALIGNED_CALLOC
+
+void * __aligned_calloc__(size_t size, int line_no, char * fn, char *file);
+#define aligned_calloc(size) __aligned_calloc__((size), __LINE__, __FUNCTION__, __FILE__)
+
+#else
 void *aligned_calloc(int size);
+#endif
 void aligned_free(void *ptr);
+
+/* base memory allocation functions/helpers */
+
+void * __bzalloc__(size_t size, int line_no, char * fn, char *file);
+#define bzalloc(size) __bzalloc__(size, __LINE__, __FUNCTION__, __FILE__)
+
+#define maybe_try_alloc_or_retfalse(x, t, sz, alloc_fn)	\
+	do {												\
+		if (!(x)) {										\
+			(x) = (t *) alloc_fn(sz);					\
+			if (!(x)) {									\
+				return false;							\
+			}											\
+		}												\
+	} while (0)
+
+#define maybe_try_bzalloc_or_retfalse(x, t, sz) maybe_try_alloc_or_retfalse(x, t, sz, bzalloc)
+#define maybe_try_aligned_calloc_or_retfalse(x, t, sz) maybe_try_alloc_or_retfalse(x, t, sz, aligned_calloc)
+
+#define safe_free_def(p, free_fn) if ((p)) { free_fn((p)); (p) = nullptr; }
+#define safe_aligned_free(p) safe_free_def(p, aligned_free)
+#define safe_free(p) safe_free_def(p, free)
 
 #if JANSSON_MAJOR_VERSION >= 2
 #define JSON_LOADS(str, err_ptr) json_loads((str), 0, (err_ptr))
@@ -637,6 +667,7 @@ extern void applog(int prio, const char *fmt, ...);
 extern void gpulog(int prio, int thr_id, const char *fmt, ...);
 
 void get_defconfig_path(char *out, size_t bufsize, char *argv0);
+extern void chexrev(char *out);
 extern void cbin2hex(char *out, const char *in, size_t len);
 extern char *bin2hex(const unsigned char *in, size_t len);
 extern bool hex2bin(void *output, const char *hexstr, size_t len);
@@ -728,8 +759,12 @@ struct lyratx {
 };
 
 #define MAX_NONCES 2
+#define MAX_WORK_DATA_UINT32 48
+
+#define MAX_WORK_DATA_BYTES (MAX_WORK_DATA_UINT32 * sizeof(uint32_t))
+
 struct work {
-	uint32_t data[48];
+	uint32_t data[MAX_WORK_DATA_UINT32];
 	uint32_t target[8];
 	uint32_t maxvote;
 
@@ -897,6 +932,7 @@ extern void tq_thaw(struct thread_q *tq);
 
 void parse_arg(int key, char *arg);
 void proper_exit(int reason);
+void restart_thread(int thr_id);
 void restart_threads(void);
 
 size_t time2str(char* buf, time_t timer);

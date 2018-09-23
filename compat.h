@@ -50,10 +50,6 @@ static __inline int setpriority(int which, int who, int prio)
 #define strncasecmp(x,y,z) _strnicmp(x,y,z)
 #define strcasecmp(x,y) _stricmp(x,y)
 
-#ifndef PRId64
-#define PRId64 "I64"
-#endif
-
 typedef int ssize_t;
 
 __inline int msver(void) {

@@ -687,6 +687,37 @@ err_out:
 	return cfg;
 }
 
+#define _calloc_nullcheck_(p)														\
+	if (!(p)) {																		\
+		applog(LOG_ERR, "[" __FUNCTION__ " allocation FAILURE] (%llu):%s:%s:%i",	\
+				(unsigned long long) size,											\
+				file,																\
+				fn,																	\
+				line_no																\
+		);																			\
+		return nullptr;																\
+	}
+
+#ifdef USE_SAFE_ALIGNED_CALLOC
+
+void *__aligned_calloc__(size_t size, int line_no, char * fn, char *file)
+{
+	const int ALIGN = 64; // cache line
+	#ifdef _MSC_VER
+		void* res = _aligned_malloc(size, ALIGN);
+		_calloc_nullcheck_(res)
+		memset(res, 0, size);
+		return res;
+	#else
+		void *mem = calloc(1, size+ALIGN+sizeof(uintptr_t));
+		_calloc_nullcheck_(mem)
+		void **ptr = (void**)((size_t)(((uintptr_t)(mem))+ALIGN+sizeof(uintptr_t)) & ~(ALIGN-1));
+		ptr[-1] = mem;
+		return ptr;
+	#endif
+}
+
+#else
 /**
  * Unlike malloc, calloc set the memory to zero
  */
@@ -704,6 +735,17 @@ void *aligned_calloc(int size)
 	return ptr;
 #endif
 }
+#endif // USE_SAFE_ALIGNED_CALLOC
+
+void * __bzalloc__(size_t size, int line_no, char * fn, char *file)
+{
+	void * p = malloc(size);
+	_calloc_nullcheck_(p);
+	memset(p, 0, size);
+	return p;
+}
+
+#undef _calloc_nullcheck_
 
 void aligned_free(void *ptr)
 {
@@ -713,6 +755,30 @@ void aligned_free(void *ptr)
 	free(((void**)ptr)[-1]);
 #endif
 }
+
+void chexrev(char *out)
+{
+	if (!out)
+		return;
+
+	char * str_hex = out;
+
+	size_t len = strlen(out) >> 1;
+
+	for (size_t i = 0; i < len; i += 2) {
+		size_t j = (len << 1) - i - 1;
+		
+		char tmp = str_hex[i];
+		char tmp2 = str_hex[i + 1];
+		
+		str_hex[i + 1] = str_hex[j + 0];
+		str_hex[i + 0] = str_hex[j - 1]; 
+
+		str_hex[j - 1] = tmp;
+		str_hex[j + 0] = tmp2;
+	}
+}
+
 
 void cbin2hex(char *out, const char *in, size_t len)
 {

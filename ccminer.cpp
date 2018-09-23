@@ -1819,6 +1819,20 @@ void restart_threads(void)
 		work_restart[i].restart = 1;
 }
 
+void restart_thread(int thr_id)
+{
+	if (thr_id >= opt_n_threads || !work_restart) {
+		applog(LOG_ERR, "\n%s: could not restart thr_id = %i.\n"
+			   "Either value is > opt_n_threads = %i or work_restart isn't initialized.", __FUNCTION__, 
+			   thr_id, opt_n_threads);
+	} else {
+		if (opt_debug && !opt_quiet)
+			applog(LOG_DEBUG,"%s. Thread ID = %i", __FUNCTION__, thr_id);
+
+		work_restart[thr_id].restart = 1;
+	}
+}
+
 static bool wanna_mine(int thr_id)
 {
 	bool state = true;
