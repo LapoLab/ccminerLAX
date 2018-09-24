@@ -1,5 +1,6 @@
 #include <memory.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "cuda_helper.h"
 
@@ -438,6 +439,74 @@ void reduceDuplexRowt_8_v2(const int rowIn, const int rowOut, const int rowInOut
 		state[j] ^= last[j];
 }
 
+static __device__ __forceinline__
+void reduceDuplexRowt_8_v2_l2zz(const int rowIn, const int rowOut, const int rowInOut, uint2* state, const uint32_t thread, const uint32_t threads)
+{
+	uint2 state1[3], state2[3], last[3];
+
+//	LD4S(state1, rowIn, 0, thread, threads);
+//	LD4S(last, rowInOut, 0, thread, threads);
+
+	LD4S(state1, rowInOut, 0, thread, threads);
+
+//	#pragma unroll
+//	for (int j = 0; j < 3; j++)
+//		state[j] ^= state1[j] + last[j];
+
+	#pragma unroll
+	for (int j = 0; j < 3; ++j) {
+		state[j] ^= state1[j];
+	}
+
+	for (int i = 0; i < 12; ++i) {
+		round_lyra(state);
+	}
+
+/*
+	round_lyra(state);
+
+	// simultaneously receive data from preceding thread and send data to following thread
+	uint2 Data0 = state[0];
+	uint2 Data1 = state[1];
+	uint2 Data2 = state[2];
+	WarpShuffle3(Data0, Data1, Data2, threadIdx.x - 1, threadIdx.x - 1, threadIdx.x - 1, 4);
+
+	if (threadIdx.x == 0)
+	{
+		last[0] ^= Data2;
+		last[1] ^= Data0;
+		last[2] ^= Data1;
+	}
+	else {
+		last[0] ^= Data0;
+		last[1] ^= Data1;
+		last[2] ^= Data2;
+	}
+
+	if (rowInOut == rowOut) {
+		#pragma unroll
+		for (int j = 0; j < 3; j++)
+			last[j] ^= state[j];
+	}
+
+	for (int i = 1; i < Nrow; i++)
+	{
+		LD4S(state1, rowIn, i, thread, threads);
+		LD4S(state2, rowInOut, i, thread, threads);
+
+		#pragma unroll
+		for (int j = 0; j < 3; j++)
+			state[j] ^= state1[j] + state2[j];
+
+		round_lyra(state);
+	}
+
+	#pragma unroll
+	for (int j = 0; j < 3; j++)
+		state[j] ^= last[j];
+*/
+}
+
 __global__
 __launch_bounds__(64, 1)
 void lyra2Zz_gpu_hash_32_1(uint32_t threads, uint32_t startNounce, uint2 *g_hash)
@@ -494,6 +563,8 @@ void lyra2Zz_gpu_hash_32_2(uint32_t threads, uint32_t startNounce, uint64_t *g_h
 
 	if (thread < threads)
 	{
+		//printf("thread [%i] is yours", thread);
+
 		uint2 state[4];
 		state[0] = __ldg(&DMatrix[(0 * threads + thread) * blockDim.x + threadIdx.x]);
 		state[1] = __ldg(&DMatrix[(1 * threads + thread) * blockDim.x + threadIdx.x]);
@@ -513,56 +584,56 @@ void lyra2Zz_gpu_hash_32_2(uint32_t threads, uint32_t startNounce, uint64_t *g_h
 		uint32_t iterator = 0;
 
 	//for (uint32_t j=0;j<4;j++) {
-
+		// 1) + 3
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowt(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator + 3) & 7;
 		}
-
+		// 2) - 1
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowt(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator - 1) & 7;
 		}
-
+		// 3) + 3
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowt(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator + 3) & 7;
 		}
-
+		// 4) - 1
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowt(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator - 1) & 7;
 		}
-
+		// 5) + 3
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowt(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator + 3) & 7;
 		}
-
+		// 6) - 1
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowt(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator - 1) & 7;
 		}
-
+		// 7) + 3
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowt(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator + 3) & 7;
 		}
-
+		// 8) - 1
 		//for (uint32_t i = 0; i<7; i++) {
 		for (uint32_t i = 0; i < 8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
@@ -573,7 +644,7 @@ void lyra2Zz_gpu_hash_32_2(uint32_t threads, uint32_t startNounce, uint64_t *g_h
 
 	//}
 		//rowa = WarpShuffle(state[0].x, 0, 4) & 7;
-		reduceDuplexRowt_8_v2(prev,iterator,rowa, state, thread, threads);
+		reduceDuplexRowt_8_v2_l2zz(prev,iterator,rowa, state, thread, threads);
 
 		DMatrix[(0 * threads + thread) * blockDim.x + threadIdx.x] = state[0];
 		DMatrix[(1 * threads + thread) * blockDim.x + threadIdx.x] = state[1];
@@ -596,9 +667,6 @@ void lyra2Zz_gpu_hash_32_3(uint32_t threads, uint32_t startNounce, uint2 *g_hash
 		state[1] = __ldg4(&((uint2x4*)DMatrix)[threads * 1 + thread]);
 		state[2] = __ldg4(&((uint2x4*)DMatrix)[threads * 2 + thread]);
 		state[3] = __ldg4(&((uint2x4*)DMatrix)[threads * 3 + thread]);
-
-		for (int i = 0; i < 12; i++)
-			round_lyra(state);
 
 		uint32_t nonce = startNounce + thread;
 		if (((uint64_t*)state)[3] <= ((uint64_t*)pTarget)[3]) {

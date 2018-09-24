@@ -532,8 +532,6 @@ void reduceDuplexRowV50(const int rowIn, const int rowInOut, const int rowOut, u
 			state[j] ^= state1[j];
 		}
 
-		//round_lyra(state);
-
 		round_lyra2(state);
 
 		// simultaneously receive data from preceding thread and send data to following thread
@@ -780,48 +778,56 @@ void lyra2Zz_gpu_hash_32_2_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_
 		uint32_t rowa; // = WarpShuffle(state[0].x, 0, 4) & 7;
 		uint32_t prev = 7;
 		uint32_t iterator = 0;
+		// 1) + 3
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator + 3) & 7;
 		}
+		// 2) - 1
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator - 1) & 7;
 		}
+		// 3) + 3
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator + 3) & 7;
 		}
+		// 4) - 1
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator - 1) & 7;
 		}
+		// 5) + 3
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator + 3) & 7;
 		}
+		// 6) - 1
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator - 1) & 7;
 		}
+		// 7) + 3
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
 			prev = iterator;
 			iterator = (iterator + 3) & 7;
 		}
+		// 8) - 1
 		for (uint32_t i = 0; i<8; i++) {
 			rowa = WarpShuffle(state[0].x, 0, 4) & 7;
 			reduceDuplexRowV50(prev, rowa, iterator, state, thread, threads);
