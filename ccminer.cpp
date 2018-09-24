@@ -2041,18 +2041,27 @@ static void *miner_thread(void *userdata)
 
 	gpu_led_off(dev_id);
 
-	if (opt_gpu_hash_test && thr_id == 0) {
-		switch (opt_algo) {
-		case ALGO_LYRA2ZZ:
-			if (lyra2Zz_test_hash(thr_id)) {
-				if (opt_debug)
+	if (opt_gpu_hash_test) {
+
+		if (thr_id == 0) {
+			switch (opt_algo) {
+			case ALGO_LYRA2ZZ:
+				if (lyra2Zz_test_hash(thr_id)) {
 					applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "[%i] hash test succeeded", thr_id);
-			} else {
-				applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "hash test failed!");
+				} else {
+					applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "[%i] hash test failed!", thr_id);
+				}
+
+				goto out;
+
+				break;
+			default: 
+				applog(LOG_ERR, "[%i] algorithm %s does not support gpu-hash-test", thr_id, algo_names[(int)opt_algo]);
 				break;
 			}
-			break;
-		default: break;
+		} else {
+			applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "[%i] wrong thread for hash test (or %s does not support gpu hash test); peacing out.", thr_id, algo_names[(int)opt_algo]);
+			goto out;
 		}
 	}
 
