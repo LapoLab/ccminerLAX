@@ -79,18 +79,20 @@ void cuda_devicenames()
 		device_sm[dev_id] = (props.major * 100 + props.minor * 10);
 
 		if (opt_device_shader_model != OPT_DEVICE_SHADER_MODEL_UNSET
-			&& opt_device_shader_model < device_sm[dev_id]) {
+				&& opt_device_shader_model < device_sm[dev_id]) {
 			device_sm[dev_id] = opt_device_shader_model;
-		} else if (opt_algo == ALGO_LYRA2ZZ) {
-			/* 
-				no need to do a hard exit if 
-				the requirements aren't met; this will implicitly
-				error out in the lyra2Z and lyra2Zz algorithm
-				implementations */ 
+		} 
+		/**
+			no need to do a hard exit if 
+			the requirements aren't met; this will implicitly
+			error out in the lyra2Z and lyra2Zz algorithm
+			implementations */
+		/*else if (opt_algo == ALGO_LYRA2ZZ) {
+			
 			if (device_sm[dev_id] >= 500) {
 				device_sm[dev_id] = 500;
 			}
-		}
+		}*/
 
 		device_mpcount[dev_id] = (short) props.multiProcessorCount;
 
