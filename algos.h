@@ -150,12 +150,12 @@ static const char *algo_names[] = {
 
 typedef struct algo_mutex {
 	pthread_mutex_t mutex;
-	
+#ifdef ALGO_MUTEX_ERROR_CODES	
 	volatile int mutex_lock_error;
 	volatile int mutex_unlock_error;
 	volatile int mutex_init_error;
 	volatile int mutex_free_error;
-
+#endif
 	volatile uint8_t initialized;
 } algo_mutex_t;
 

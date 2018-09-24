@@ -470,12 +470,19 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	const uint32_t first_nonce = pdata[19];
 	int dev_id = device_map[thr_id];
 
-	if (algo_mutex_try_lock()) {
+	int algomuterr = algo_mutex_try_lock();
+
+	if (algomuterr == 0) {
+		applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "[%i] Got staleblock lock!", thr_id);
+
 		if (!g_staleblock_query.get()) {
 			g_staleblock_query.reset(new l2zz_staleblock_query());
 		}
 
 		algo_mutex_try_unlock();
+	} else {
+		applog(LOG_WARNING, LYRA2ZZ_LOG_HEADER "[%i] Could not get staleblock lock! Error: %i", 
+			   thr_id, algomuterr);
 	}
 
 	if (opt_benchmark)
@@ -503,7 +510,7 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 		debug_interval_start = _time64(NULL);
 
 	if (g_staleblock_query.get() && !g_staleblock_query->init(thr_id)) {
-		applog(LOG_WARNING, "[%i] could not allocate stale block check memory!", thr_id);
+		applog(LOG_WARNING, LYRA2ZZ_LOG_HEADER "[%i] could not allocate stale block check memory!", thr_id);
 	}
 
 	do {

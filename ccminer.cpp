@@ -629,12 +629,14 @@ void format_hashrate(double hashrate, char *output)
  */
 
 algo_mutex_t opt_algo_mutex = {
-	0, /* mutex */
+	PTHREAD_MUTEX_INITIALIZER, /* mutex */
 
+#ifdef ALGO_MUTEX_ERROR_CODES	
 	0, /* mutex_lock_error */
 	0, /* mutex_unlock_error */
 	0, /* mutex_init_error */
 	0, /* mutex_free_error */
+#endif
 
 	false, /* initialized */
 };
@@ -644,30 +646,19 @@ static inline bool algo_mutex_used(void)
 	return opt_algo == ALGO_LYRA2ZZ;
 }
 
-static bool algo_mutex_clean()
+static inline bool algo_mutex_valid(const char * caller)
 {
-	if (opt_algo_mutex.mutex_init_error 
-		|| opt_algo_mutex.mutex_free_error 
-		|| opt_algo_mutex.mutex_unlock_error 
-		|| opt_algo_mutex.mutex_lock_error) {
-		applog(LOG_ERR, "\nopt_algo_mutex error code detected:\n\tinit: %i\n\tfree:\n\tlock: %i\n\tunlock: %i",
-			   opt_algo_mutex.mutex_init_error, opt_algo_mutex.mutex_free_error, opt_algo_mutex.mutex_unlock_error,
-			   opt_algo_mutex.mutex_lock_error);
+	if (!opt_algo_mutex.initialized) {
+		applog(LOG_WARNING, "%s -> %s: mutex not initialized!", caller, __FUNCTION__);
 	}
 
-	return opt_algo_mutex.initialized == true
-		&& opt_algo_mutex.mutex_init_error == 0 
-		&& opt_algo_mutex.mutex_free_error == 0
-		&& opt_algo_mutex.mutex_unlock_error == 0
-		&& opt_algo_mutex.mutex_lock_error == 0;
+	return opt_algo_mutex.initialized;
 }
 
 void algo_mutex_init(void)
 {
 	if (algo_mutex_used() && !opt_algo_mutex.initialized) {
-		if (!opt_algo_mutex.mutex_free_error) {
-			opt_algo_mutex.mutex_init_error = pthread_mutex_init(&opt_algo_mutex.mutex, nullptr);
-		}
+		//pthread_mutex_init(&opt_algo_mutex.mutex, nullptr);
 
 		opt_algo_mutex.initialized = true;
 	}
@@ -676,29 +667,35 @@ void algo_mutex_init(void)
 void algo_mutex_free(void)
 {
 	if (opt_algo_mutex.initialized) {
-		if (!opt_algo_mutex.mutex_init_error) {
-			opt_algo_mutex.mutex_free_error = pthread_mutex_destroy(&opt_algo_mutex.mutex);
-		}
-
+		//pthread_mutex_destroy(&opt_algo_mutex.mutex);
 		opt_algo_mutex.initialized = false;
 	}
 }
 
 int algo_mutex_try_lock(void)
 {
-	if (algo_mutex_clean()) {
-		opt_algo_mutex.mutex_lock_error = pthread_mutex_lock(&opt_algo_mutex.mutex);
+	int error = -1;
 
-		return !opt_algo_mutex.mutex_lock_error;
-	}
+	if (algo_mutex_valid(__FUNCTION__)) {
+		error = pthread_mutex_lock(&opt_algo_mutex.mutex);
+	
+		if (error != 0) {
+			applog(LOG_ERR, "%s: could not lock mutex. Error code: %i", __FUNCTION__, error);
+		}
+	} 
 
-	return false;
+	return error;
 }
 
 void algo_mutex_try_unlock(void)
 {
-	if (algo_mutex_clean())
-		opt_algo_mutex.mutex_unlock_error = pthread_mutex_unlock(&opt_algo_mutex.mutex);
+	if (algo_mutex_valid(__FUNCTION__)) {
+		int error = pthread_mutex_unlock(&opt_algo_mutex.mutex);
+	
+		if (error != 0) {
+			applog(LOG_ERR, "%s: could not unlock mutex. Error code: %i", __FUNCTION__, error);
+		}
+	}
 }
 
 /**
@@ -4162,8 +4159,6 @@ int main(int argc, char *argv[])
 	pthread_mutex_init(&stats_lock, NULL);
 	pthread_mutex_init(&g_work_lock, NULL);
 
-	algo_mutex_init(); /* optional, algo-dependent mutex */
-
 	// number of cpus for thread affinity
 #if defined(WIN32)
 	SYSTEM_INFO sysinfo;
@@ -4264,6 +4259,8 @@ int main(int argc, char *argv[])
 		return EXIT_CODE_SW_INIT_ERROR;
 	}
 
+	algo_mutex_init(); /* optional, algo-dependent mutex */
+
 	if (opt_background) {
 #ifndef WIN32
 		i = fork();
@@ -4344,6 +4341,8 @@ int main(int argc, char *argv[])
 		}
 		opt_autotune = false;
 	}
+
+
 
 #ifdef HAVE_SYSLOG_H
 	if (use_syslog)
