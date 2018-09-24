@@ -257,6 +257,8 @@ int opt_api_mcast_port = 4068;
 
 bool opt_stratum_stats = false;
 
+bool opt_gpu_hash_test = false;
+
 static char const usage[] = "\
 Usage: " PROGRAM_NAME " [OPTIONS]\n\
 Options:\n\
@@ -371,9 +373,10 @@ Options:\n\
       --max-rate=N[KMG] Only mine if net hashrate is less than specified value\n\
       --max-diff=N      Only mine if net difficulty is less than specified value\n\
                         Can be tuned with --resume-diff=N to set a resume value\n\
-	  --shader-model=N  specify a specific shader model to use if it's supported. Otherwise, fall back to default.\n\
-						The syntax expects an integer such that the value is equal to major * 100 + minor * 10.\n\
-						For example, shader model 5.2 would need to be passed as --shader-model=520\n\
+      --shader-model=N  (lyra2zz only) Specify a specific shader model to use if it's supported. Otherwise, fall back to default.\n\
+                        The syntax expects an integer such that the value is equal to major * 100 + minor * 10.\n\
+                        For example, shader model 5.2 would need to be passed as --shader-model=520\n\
+      --gpu-hash-test   (lyra2zz only) Test current CUDA implementation to ensure it produces expected results\n\
       --max-log-rate    Interval to reduce per gpu hashrate logs (default: 3)\n"
 #if defined(__linux) /* via nvml */
 "\
@@ -500,6 +503,7 @@ struct option options[] = {
 	{ "diff", 1, NULL, 'f' }, // compat
 	{ "print-interval", 1, NULL, 'M' },
 	{ "shader-model", 1, NULL, 1200 },
+	{ "gpu-hash-test", no_argument, NULL, 1201 },
 	{ 0, 0, 0, 0 }
 };
 
@@ -2036,6 +2040,21 @@ static void *miner_thread(void *userdata)
 	}
 
 	gpu_led_off(dev_id);
+
+	if (opt_gpu_hash_test && thr_id == 0) {
+		switch (opt_algo) {
+		case ALGO_LYRA2ZZ:
+			if (lyra2Zz_test_hash(thr_id)) {
+				if (opt_debug)
+					applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "[%i] hash test succeeded", thr_id);
+			} else {
+				applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "hash test failed!");
+				break;
+			}
+			break;
+		default: break;
+		}
+	}
 
 	while (!abort_flag) {
 		struct timeval tv_start, tv_end, diff;
@@ -3933,6 +3952,10 @@ void parse_arg(int key, char *arg)
 		opt_device_shader_model = devsm;
 
 	}	break;
+
+	case 1201: { /* --gpu-hash-test */
+		opt_gpu_hash_test = true;
+	} break;
 
 	case 'V':
 		show_version_and_exit();
