@@ -617,6 +617,86 @@ void format_hashrate(double hashrate, char *output)
 		format_hashrate_unit(hashrate, output, "H/s");
 }
 
+/*
+ * algo mutex;
+ * currently only applies to lyra2Zz, but obviously
+ * may be used for other algos 
+ * (just make sure to modify opt_algo check as needed here)
+ */
+
+algo_mutex_t opt_algo_mutex = {
+	0, /* mutex */
+
+	0, /* mutex_lock_error */
+	0, /* mutex_unlock_error */
+	0, /* mutex_init_error */
+	0, /* mutex_free_error */
+
+	false, /* initialized */
+};
+
+static inline bool algo_mutex_used(void)
+{
+	return opt_algo == ALGO_LYRA2ZZ;
+}
+
+static bool algo_mutex_clean()
+{
+	if (opt_algo_mutex.mutex_init_error 
+		|| opt_algo_mutex.mutex_free_error 
+		|| opt_algo_mutex.mutex_unlock_error 
+		|| opt_algo_mutex.mutex_lock_error) {
+		applog(LOG_ERR, "\nopt_algo_mutex error code detected:\n\tinit: %i\n\tfree:\n\tlock: %i\n\tunlock: %i",
+			   opt_algo_mutex.mutex_init_error, opt_algo_mutex.mutex_free_error, opt_algo_mutex.mutex_unlock_error,
+			   opt_algo_mutex.mutex_lock_error);
+	}
+
+	return opt_algo_mutex.initialized == true
+		&& opt_algo_mutex.mutex_init_error == 0 
+		&& opt_algo_mutex.mutex_free_error == 0
+		&& opt_algo_mutex.mutex_unlock_error == 0
+		&& opt_algo_mutex.mutex_lock_error == 0;
+}
+
+void algo_mutex_init(void)
+{
+	if (algo_mutex_used() && !opt_algo_mutex.initialized) {
+		if (!opt_algo_mutex.mutex_free_error) {
+			opt_algo_mutex.mutex_init_error = pthread_mutex_init(&opt_algo_mutex.mutex, nullptr);
+		}
+
+		opt_algo_mutex.initialized = true;
+	}
+}
+
+void algo_mutex_free(void)
+{
+	if (opt_algo_mutex.initialized) {
+		if (!opt_algo_mutex.mutex_init_error) {
+			opt_algo_mutex.mutex_free_error = pthread_mutex_destroy(&opt_algo_mutex.mutex);
+		}
+
+		opt_algo_mutex.initialized = false;
+	}
+}
+
+int algo_mutex_try_lock(void)
+{
+	if (algo_mutex_clean()) {
+		opt_algo_mutex.mutex_lock_error = pthread_mutex_lock(&opt_algo_mutex.mutex);
+
+		return !opt_algo_mutex.mutex_lock_error;
+	}
+
+	return false;
+}
+
+void algo_mutex_try_unlock(void)
+{
+	if (algo_mutex_clean())
+		opt_algo_mutex.mutex_unlock_error = pthread_mutex_unlock(&opt_algo_mutex.mutex);
+}
+
 /**
  * Exit app
  */
@@ -658,6 +738,9 @@ void proper_exit(int reason)
 #	endif
 	}
 #endif
+
+	algo_mutex_free();
+
 	free(opt_syslog_pfx);
 	free(opt_api_bind);
 	if (opt_api_allow) free(opt_api_allow);
@@ -4046,6 +4129,8 @@ int main(int argc, char *argv[])
 	pthread_mutex_init(&stratum_work_lock, NULL);
 	pthread_mutex_init(&stats_lock, NULL);
 	pthread_mutex_init(&g_work_lock, NULL);
+
+	algo_mutex_init(); /* optional, algo-dependent mutex */
 
 	// number of cpus for thread affinity
 #if defined(WIN32)
