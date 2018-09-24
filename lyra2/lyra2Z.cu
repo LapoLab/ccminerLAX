@@ -509,14 +509,18 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	if (time_hash_iter)
 		debug_interval_start = _time64(NULL);
 
-	if (g_staleblock_query.get() && !g_staleblock_query->init(thr_id)) {
-		applog(LOG_WARNING, LYRA2ZZ_LOG_HEADER "[%i] could not allocate stale block check memory!", thr_id);
+	if (thr_id == 0) {
+		if (g_staleblock_query.get() && !g_staleblock_query->init(thr_id)) {
+			applog(LOG_WARNING, LYRA2ZZ_LOG_HEADER "[%i] could not allocate stale block check memory!", thr_id);
+		}
 	}
 
 	do {
-		if (g_staleblock_query.get() && g_staleblock_query->stale_block_check(thr_id, work)) {
-			restart_thread(thr_id);
-			break;
+		if (thr_id == 0) {
+			if (g_staleblock_query.get() && g_staleblock_query->stale_block_check(thr_id, work)) {
+				restart_threads();
+				break;
+			}
 		}
 
 		struct timeval hash_time, start_iter, end_hash;

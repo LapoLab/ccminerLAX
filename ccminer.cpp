@@ -2134,6 +2134,10 @@ static void *miner_thread(void *userdata)
 			}
 		} else {
 			uint32_t secs = 0;
+
+			if (opt_algo == ALGO_LYRA2ZZ && thr_id != 0)
+				goto after_g_work_fetch;
+
 			pthread_mutex_lock(&g_work_lock);
 			secs = (uint32_t) (time(NULL) - g_work_time);
 			if (secs >= scan_time || nonceptr[0] >= (end_nonce - 0x100)) {
@@ -2153,6 +2157,8 @@ static void *miner_thread(void *userdata)
 				g_work_time = time(NULL);
 			}
 		}
+
+after_g_work_fetch:
 
 		// reset shares id counter on new job
 		if (strcmp(work.job_id, g_work.job_id))
