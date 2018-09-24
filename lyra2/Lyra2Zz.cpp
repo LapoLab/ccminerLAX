@@ -924,8 +924,6 @@ public:
 	}
 };
 
-extern "C" int lyra2Zz_test_hash(int thr_id, uint32_t *block_data);
-
 static inline std::string l2zz_gbt_get_jstring(const json_t* blocktemplate, const char* key)
 {
 	json_t *val = json_object_get(blocktemplate, key);
