@@ -1,41 +1,15 @@
 #include <memory.h>
+#include <stdint.h>
+
+#include "cuda_helper.h"
 
 #ifdef __INTELLISENSE__
 /* just for vstudio code colors */
-//#define __CUDA_ARCH__ 500
 #define __threadfence_block()
 #define __ldg(x) *(x)
 #define atomicMin(p,y) y
 #define __CUDA_ARCH__ 500
 #endif
-
-#include "cuda_helper.h"
-
-#define TPB50 32
-
-namespace l2ZZ {
-
-__constant__ uint32_t pTarget[8];
-
-__device__ uint2 *DMatrix;
-
-static __device__ __forceinline__
-void Gfunc(uint2 & a, uint2 &b, uint2 &c, uint2 &d)
-{
-#if __CUDA_ARCH__ > 500
-	a += b; uint2 tmp = d; d.y = a.x ^ tmp.x; d.x = a.y ^ tmp.y;
-	c += d; b ^= c; b = ROR24(b);
-	a += b; d ^= a; d = ROR16(d);
-	c += d; b ^= c; b = ROR2(b, 63);
-#else
-	a += b; d ^= a; d = SWAPUINT2(d);
-	c += d; b ^= c; b = ROR2(b, 24);
-	a += b; d ^= a; d = ROR2(d, 16);
-	c += d; b ^= c; b = ROR2(b, 63);
-#endif
-}
-
-}
 
 #if __CUDA_ARCH__ == 500 || __CUDA_ARCH__ == 350
 #include "cuda_lyra2_vectors.h"
@@ -44,8 +18,7 @@ void Gfunc(uint2 & a, uint2 &b, uint2 &c, uint2 &d)
 #define Ncol 8
 #define memshift 3
 
-namespace l2ZZ {
-
+namespace l2ZZ { namespace sm50 {
 __device__ __forceinline__ uint2 LD4S(const int index)
 {
 	extern __shared__ uint2 shared_mem[];
@@ -59,8 +32,7 @@ __device__ __forceinline__ void ST4S(const int index, const uint2 data)
 
 	shared_mem[(index * blockDim.y + threadIdx.y) * blockDim.x + threadIdx.x] = data;
 }
-
-}
+} } // end namespace l2ZZ namespace sm50
 
 #if __CUDA_ARCH__ == 300
 __device__ __forceinline__ uint32_t WarpShuffle(uint32_t a, uint32_t b, uint32_t c)
@@ -81,7 +53,8 @@ __device__ __forceinline__ void WarpShuffle3(uint2 &a1, uint2 &a2, uint2 &a3, ui
 }
 #else // != 300
 
-namespace l2ZZ {
+namespace l2ZZ { 
+namespace sm50 {
 
 __device__ __forceinline__ uint32_t WarpShuffle(uint32_t a, uint32_t b, uint32_t c)
 {
@@ -178,11 +151,14 @@ __device__ __forceinline__ void WarpShuffle3_2(uint2 &a1, uint2 &a2, uint2 &a3, 
 }
 
 
-} // end namespace
+} // end namespace sm50
+} // end namespace l2ZZ
 
 #endif // != 300
 
 namespace l2ZZ {
+namespace sm50 {
+
 
 __device__ __forceinline__ void round_lyra(uint2 s[4])
 {
@@ -886,13 +862,16 @@ void lyra2Zz_gpu_hash_32_3_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_
 	}
 }
 
-} 
+} // end namespace sm50
+}  // end namespace l2ZZ
 
 #else
 /* if __CUDA_ARCH__ != 500 .. host */
 namespace l2ZZ {
+namespace sm50 {
 __global__ void lyra2Zz_gpu_hash_32_1_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_hash) {}
 __global__ void lyra2Zz_gpu_hash_32_2_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_hash) {}
 __global__ void lyra2Zz_gpu_hash_32_3_sm5(uint32_t threads, uint32_t startNounce, uint2 *g_hash, uint32_t *resNonces) {}
+}
 }
 #endif

@@ -2,7 +2,7 @@
 
 #ifdef __INTELLISENSE__
 /* just for vstudio code colors */
-//#define __CUDA_ARCH__ 500
+#define __CUDA_ARCH__ 500
 #define __threadfence_block()
 #define __ldg(x) *(x)
 #define atomicMin(p,y) y
