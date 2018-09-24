@@ -57,6 +57,8 @@ void lyra2Zz_make_header(
 
 int lyra2Zz_benchmark_set_params(int thr_id, struct work *work);
 
+extern int lyra2Zz_test_hash(int thr_id);
+
 #ifdef __cplusplus
 }
 #endif

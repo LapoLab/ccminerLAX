@@ -39,6 +39,9 @@ extern uint32_t lyra2Zz_getSecNonce(int thr_id, int num);
 
 extern bool get_work(struct thr_info *thr, struct work *work);
 
+extern int algo_mutex_try_lock(void);
+extern void algo_mutex_try_unlock(void);
+
 /*
 extern "C" void lyra2Z_hash(void *state, const void *input)
 {
@@ -81,15 +84,16 @@ static size_t d_hash_size_bytes()
 	return (size_t)32 * throughput; 
 }
 
-static void maybe_init_thread_data(int thr_id, int dev_id, uint32_t max_nonce, uint32_t first_nonce)
+static int maybe_init_thread_data(int thr_id, int dev_id, uint32_t max_nonce, uint32_t first_nonce, bool l2zz)
 {
 	if (init[thr_id])
-		return;
+		return true;
 
-	cudaSetDevice(dev_id);
+	CUDA_SAFE_CALL_PAUSE(cudaSetDevice(dev_id));
+
 	if (opt_cudaschedule == -1 && gpu_threads == 1) {
-		cudaDeviceReset();
-		cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync);
+		CUDA_SAFE_CALL_PAUSE(cudaDeviceReset());
+		CUDA_SAFE_CALL_PAUSE(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
 		CUDA_LOG_ERROR();
 	}
 
@@ -100,26 +104,40 @@ static void maybe_init_thread_data(int thr_id, int dev_id, uint32_t max_nonce, u
 	if (init[thr_id]) throughput = min(throughput, max_nonce - first_nonce);
 
 	cudaDeviceProp props;
-	cudaGetDeviceProperties(&props, dev_id);
+	CUDA_SAFE_CALL_PAUSE(cudaGetDeviceProperties(&props, dev_id));
 	gtx750ti = (strstr(props.name, "750 Ti") != NULL);
 
 	gpulog(LOG_INFO, thr_id, "Intensity set to %g, %u cuda threads", throughput2intensity(throughput), throughput);
 
 	blake256_cpu_init(thr_id, throughput);
 
-	if (device_sm[dev_id] >= 350)
-	{
-		size_t matrix_sz = device_sm[dev_id] > 500 ? sizeof(uint64_t) * 4 * 4 : sizeof(uint64_t) * 8 * 8 * 3 * 4;
-		d_matrix_size = matrix_sz;
-		CUDA_SAFE_CALL(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
-		lyra2Zz_cpu_init(thr_id, throughput, d_matrix[thr_id]);
+	size_t matrix_sz = device_sm[dev_id] > 500 ? sizeof(uint64_t) * 4 * 4 : sizeof(uint64_t) * 8 * 8 * 3 * 4;
+	d_matrix_size = matrix_sz;
+
+	if (l2zz) {
+		if (device_sm[dev_id] >= 500) {
+			CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
+			lyra2Zz_cpu_init(thr_id, throughput, d_matrix[thr_id]);
+		} else {
+			gpulog(LOG_ERR, thr_id, "Lyra2Zz requires at least shader model 5.0 to work! This device doesn't meet the requirement. Exiting...",
+				device_sm[dev_id]);
+
+			return false;
+		}
+	} else {
+		CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
+
+		if (device_sm[dev_id] >= 350) {				
+			lyra2Z_cpu_init(thr_id, throughput, d_matrix[thr_id]);
+		} else {
+			lyra2Z_cpu_init_sm2(thr_id, throughput);
+		}
 	}
-	else
-		lyra2Zz_cpu_init_sm2(thr_id, throughput);
 
-	CUDA_SAFE_CALL(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes()));
+	CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes()));
 
-	init[thr_id] = true;
+	init[thr_id] = true;	
+	return true;
 }
 
 struct target_hash {
@@ -161,6 +179,11 @@ static void maybe_report_bad_nonce(int thr_id, uint32_t target, uint32_t vhash, 
 					"vhash high word = %08x\n"
 					"result does not validate on CPU!\n",
 					first_nonce, target, nonce_ret, vhash);
+}
+
+static inline void log_shadermodel(int thr_id)
+{
+	gpulog(LOG_BLUE, thr_id, "Device shader model: %i", device_sm[thr_id % MAX_GPUS]);
 }
 
 extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done)
@@ -447,55 +470,21 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	const uint32_t first_nonce = pdata[19];
 	int dev_id = device_map[thr_id];
 
-	if (!g_staleblock_query.get())
-		g_staleblock_query.reset(new l2zz_staleblock_query());
+	if (algo_mutex_try_lock()) {
+		if (!g_staleblock_query.get()) {
+			g_staleblock_query.reset(new l2zz_staleblock_query());
+		}
+
+		algo_mutex_try_unlock();
+	}
 
 	if (opt_benchmark)
 		ptarget[7] = 0x00ff;
 
-	gpulog(LOG_BLUE, thr_id, "Device shader model: %i", device_sm[thr_id % MAX_GPUS]);
+	log_shadermodel(thr_id);
 
-	if (!init[thr_id])
-	{
-		CUDA_SAFE_CALL_PAUSE(cudaSetDevice(dev_id));
-		if (opt_cudaschedule == -1 && gpu_threads == 1) {
-			CUDA_SAFE_CALL_PAUSE(cudaDeviceReset());
-			CUDA_SAFE_CALL_PAUSE(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
-			CUDA_LOG_ERROR();
-		}
-
-		cuda_get_arch(thr_id);
-		int intensity = (device_sm[dev_id] > 500 && !is_windows()) ? 17 : 16;
-		if (device_sm[dev_id] <= 500) intensity = 15;
-		throughput = cuda_default_throughput(thr_id, 1U << intensity); // 18=256*256*4;
-		if (init[thr_id]) throughput = min(throughput, max_nonce - first_nonce);
-
-		cudaDeviceProp props;
-		CUDA_SAFE_CALL_PAUSE(cudaGetDeviceProperties(&props, dev_id));
-		gtx750ti = (strstr(props.name, "750 Ti") != NULL);
-
-		gpulog(LOG_INFO, thr_id, "Intensity set to %g, %u cuda threads", throughput2intensity(throughput), throughput);
-
-		blake256_cpu_init(thr_id, throughput);
-
-		if (device_sm[dev_id] >= 500) {
-			size_t matrix_sz = device_sm[dev_id] > 500 ? sizeof(uint64_t) * 4 * 4 : sizeof(uint64_t) * 8 * 8 * 3 * 4;
-			d_matrix_size = matrix_sz;
-			CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
-			lyra2Zz_cpu_init(thr_id, throughput, d_matrix[thr_id]);
-
-		} else {
-
-			gpulog(LOG_ERR, thr_id, "Lyra2Zz requires at least shader model 5.0 to work! This device doesn't meet the requirement. Exiting...",
-				device_sm[dev_id]);
-
-			return 0;
-		}
-
-		CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes()));
-
-		init[thr_id] = true;
-	}
+	if (!maybe_init_thread_data(thr_id, dev_id, max_nonce, first_nonce, true))
+		return 0;
 	
 	for (int k=0; k < 28; k++) {
 		be32enc(&endiandata[k], pdata[k]);
@@ -513,12 +502,12 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	if (time_hash_iter)
 		debug_interval_start = _time64(NULL);
 
-	if (!g_staleblock_query->init(thr_id)) {
+	if (g_staleblock_query.get() && !g_staleblock_query->init(thr_id)) {
 		applog(LOG_WARNING, "[%i] could not allocate stale block check memory!", thr_id);
 	}
 
 	do {
-		if (g_staleblock_query->stale_block_check(thr_id, work)) {
+		if (g_staleblock_query.get() && g_staleblock_query->stale_block_check(thr_id, work)) {
 			restart_thread(thr_id);
 			break;
 		}
@@ -713,8 +702,8 @@ static bool niche_test(int thr_id)
 static bool large_test(int thr_id)
 {
 #ifdef _MSC_VER
-	uint32_t correct = 0;
-	const uint32_t num_tests = 1 << 8;
+	int correct = 0;
+	const int num_tests = 1 << 8;
 
 	LPCSTR cryptname = __FUNCTION__;
 	HCRYPTPROV hCryptProv = NULL;
@@ -728,13 +717,13 @@ static bool large_test(int thr_id)
 		}
 	}
 
-	for (uint32_t i = 0; i < num_tests; ++i) {
+	for (int i = 0; i < num_tests; ++i) {
 		uint32_t adata[28];
 		
 		if (!CryptGenRandom(hCryptProv, sizeof(adata), (BYTE *)&adata[0])) {
 			applog(
 				LOG_WARNING, 
-				__FUNCTION__ " Could not randomly generate buffer for iteration %u. Error: 0x%x\n", 
+				__FUNCTION__ " Could not randomly generate buffer for iteration %i. Error: 0x%x\n", 
 				i, 
 				GetLastError()
 			);
@@ -748,6 +737,10 @@ static bool large_test(int thr_id)
 	}
 
 	CryptReleaseContext(hCryptProv, NULL);
+
+	if (opt_debug)
+		applog(LOG_DEBUG, LYRA2ZZ_LOG_HEADER "[%i] correct/num_tests = %i/%i", thr_id, correct, num_tests);
+
 	return correct == num_tests;
 
 ret_crypt_error:
@@ -758,10 +751,16 @@ ret_crypt_error:
 #endif
 }
 
-extern "C" int lyra2Zz_test_hash(int thr_id, uint32_t *block_data)
+extern "C" int lyra2Zz_test_hash(int thr_id)
 {
-	maybe_init_thread_data(thr_id, 0, UINT32_MAX, 0);
-	return large_test(thr_id);
+	if (thr_id == 0) {
+		if (!maybe_init_thread_data(thr_id, 0, UINT32_MAX, 0, true))
+			return false;
+
+		return large_test(thr_id);
+	} else {
+		return true;
+	}
 }
 
 
