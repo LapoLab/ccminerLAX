@@ -369,6 +369,9 @@
     <ClCompile Include="statelog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="thread_sync.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="algos.h">
@@ -630,6 +633,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="statelog.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="lyra2\cuda_lyra2Zz_sm52.cuh">
+      <Filter>Source Files\CUDA\lyra2</Filter>
+    </ClInclude>
+    <ClInclude Include="thread_sync.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -1031,6 +1040,9 @@
       <Filter>Source Files\CUDA\x16</Filter>
     </CudaCompile>
     <CudaCompile Include="lyra2\cuda_lyra2Zz.cu">
+      <Filter>Source Files\CUDA\lyra2</Filter>
+    </CudaCompile>
+    <CudaCompile Include="lyra2\lyra2Zz.cu">
       <Filter>Source Files\CUDA\lyra2</Filter>
     </CudaCompile>
   </ItemGroup>

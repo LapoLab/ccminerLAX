@@ -80,7 +80,7 @@
       <MaxRegCount>80</MaxRegCount>
       <PtxAsOptionV>true</PtxAsOptionV>
       <Keep>true</Keep>
-      <CodeGeneration>compute_50,sm_50</CodeGeneration>
+      <CodeGeneration>compute_50,sm_50;compute_52,sm_52</CodeGeneration>
       <Include>$(NVTOOLSEXT_PATH)\include;..\..\..\Common\C99</Include>
     </CudaCompile>
   </ItemDefinitionGroup>
@@ -112,7 +112,7 @@
       <MaxRegCount>80</MaxRegCount>
       <PtxAsOptionV>true</PtxAsOptionV>
       <Keep>true</Keep>
-      <CodeGeneration>compute_50,sm_50</CodeGeneration>
+      <CodeGeneration>compute_50,sm_50;compute_52,sm_52</CodeGeneration>
       <Include>$(NVTOOLSEXT_PATH)\include;..\..\..\Common\C99</Include>
       <TargetMachinePlatform>64</TargetMachinePlatform>
     </CudaCompile>
@@ -155,7 +155,7 @@
       <MaxRegCount>80</MaxRegCount>
       <PtxAsOptionV>true</PtxAsOptionV>
       <Keep>true</Keep>
-      <CodeGeneration>compute_50,sm_50</CodeGeneration>
+      <CodeGeneration>compute_50,sm_50;compute_52,sm_52</CodeGeneration>
       <AdditionalOptions>--ptxas-options="-O2" --Wno-deprecated-gpu-targets %(AdditionalOptions)</AdditionalOptions>
       <Optimization>O2</Optimization>
     </CudaCompile>
@@ -198,7 +198,7 @@
       <MaxRegCount>80</MaxRegCount>
       <PtxAsOptionV>true</PtxAsOptionV>
       <Keep>true</Keep>
-      <CodeGeneration>compute_50,sm_50</CodeGeneration>
+      <CodeGeneration>compute_50,sm_50;compute_52,sm_52</CodeGeneration>
       <Include>$(NVTOOLSEXT_PATH)\include</Include>
       <Optimization>O3</Optimization>
       <TargetMachinePlatform>64</TargetMachinePlatform>
@@ -251,6 +251,7 @@
     <ClCompile Include="pools.cpp" />
     <ClCompile Include="sph\groestl.c" />
     <ClCompile Include="statelog.cpp" />
+    <ClCompile Include="thread_sync.cpp" />
     <ClCompile Include="uint256.cpp" />
     <ClCompile Include="util.cpp" />
     <ClCompile Include="bench.cpp" />
@@ -271,6 +272,7 @@
     <ClInclude Include="equi\equihash.h" />
     <ClInclude Include="libbase58.h" />
     <ClInclude Include="lyra2\cuda_lyra2Zz_sm5.cuh" />
+    <ClInclude Include="lyra2\cuda_lyra2Zz_sm52.cuh" />
     <ClInclude Include="lyra2\Lyra2Zz.h" />
     <ClInclude Include="lyra2\Sponge.h" />
     <ClInclude Include="neoscrypt\neoscrypt.h" />
@@ -278,6 +280,7 @@
     <ClCompile Include="neoscrypt\neoscrypt-cpu.c" />
     <ClInclude Include="neoscrypt\cuda_vectors.h" />
     <ClInclude Include="statelog.h" />
+    <ClInclude Include="thread_sync.h" />
     <ClInclude Include="uint256.h" />
     <ClInclude Include="x11\cuda_x11_simd512_sm2.cuh" />
     <ClInclude Include="x16\cuda_x16.h" />
@@ -312,6 +315,7 @@
       <CodeGeneration Condition="'$(Configuration)|$(Platform)'=='Release|x64'">compute_61,sm_61;compute_52,sm_52;compute_50,sm_50;compute_30,sm_30</CodeGeneration>
     </CudaCompile>
     <CudaCompile Include="lyra2\cuda_lyra2Zz.cu" />
+    <CudaCompile Include="lyra2\lyra2Zz.cu" />
     <CudaCompile Include="neoscrypt\cuda_neoscrypt.cu">
       <MaxRegCount>160</MaxRegCount>
     </CudaCompile>
