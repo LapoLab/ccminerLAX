@@ -2465,7 +2465,7 @@ after_g_work_fetch:
 		// check (and reset) previous errors
 		volatile cudaError_t err = cudaGetLastError();
 		if (err != cudaSuccess && !opt_quiet) {
-			gpulog(LOG_WARNING, thr_id, "%s", cudaGetErrorString(err));
+			gpulog(LOG_WARNING, thr_id, "%s CUDA CHECK before scanhash: %i", __FUNCTION__, /*cudaGetErrorString(err)*/ (int) err);
 		}
 
 		work.valid_nonces = 0;
