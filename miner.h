@@ -403,6 +403,7 @@ extern void free_luffa(int thr_id);
 extern void free_lyra2(int thr_id);
 extern void free_lyra2v2(int thr_id);
 extern void free_lyra2Z(int thr_id);
+extern void free_lyra2Zz(int thr_id);
 extern void free_myriad(int thr_id);
 extern void free_neoscrypt(int thr_id);
 extern void free_nist5(int thr_id);

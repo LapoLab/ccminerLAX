@@ -2684,8 +2684,10 @@ after_g_work_fetch:
 			
 			switch (opt_algo) {
 			case ALGO_LYRA2Z:
-			case ALGO_LYRA2ZZ:
 				free_lyra2Z(thr_id);
+				break;
+			case ALGO_LYRA2ZZ:
+				free_lyra2Zz(thr_id);
 				break;
 			}
 			
