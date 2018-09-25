@@ -1892,6 +1892,35 @@ static bool wanna_mine(int thr_id)
 	return state;
 }
 
+static bool gpu_hash_test_check(int thr_id)
+{
+	if (opt_gpu_hash_test) {
+
+		if (thr_id == 0) {
+			switch (opt_algo) {
+			case ALGO_LYRA2ZZ:
+				if (lyra2Zz_test_hash(thr_id)) {
+					applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "[%i] hash test succeeded", thr_id);
+					return true;
+				} 
+
+				applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "[%i] hash test failed!", thr_id);
+				return false;
+
+				break;
+			default: 
+				applog(LOG_ERR, "[%i] algorithm %s does not support gpu-hash-test", thr_id, algo_names[(int)opt_algo]);
+				break;
+			}
+		} else {
+			applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "[%i] wrong thread for hash test (or %s does not support gpu hash test); peacing out.", thr_id, algo_names[(int)opt_algo]);
+			return false;
+		}
+	}
+
+	return true;
+}
+
 static void *miner_thread(void *userdata)
 {
 	struct thr_info *mythr = (struct thr_info *)userdata;
@@ -1960,29 +1989,8 @@ static void *miner_thread(void *userdata)
 
 	gpu_led_off(dev_id);
 
-	if (opt_gpu_hash_test) {
-
-		if (thr_id == 0) {
-			switch (opt_algo) {
-			case ALGO_LYRA2ZZ:
-				if (lyra2Zz_test_hash(thr_id)) {
-					applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "[%i] hash test succeeded", thr_id);
-				} else {
-					applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "%s", "[%i] hash test failed!", thr_id);
-				}
-
-				goto out;
-
-				break;
-			default: 
-				applog(LOG_ERR, "[%i] algorithm %s does not support gpu-hash-test", thr_id, algo_names[(int)opt_algo]);
-				break;
-			}
-		} else {
-			applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "[%i] wrong thread for hash test (or %s does not support gpu hash test); peacing out.", thr_id, algo_names[(int)opt_algo]);
-			goto out;
-		}
-	}
+	if (!gpu_hash_test_check(thr_id))
+		goto out;
 
 	while (!abort_flag) {
 		struct timeval tv_start, tv_end, diff;
@@ -2081,7 +2089,6 @@ static void *miner_thread(void *userdata)
 		}
 
 after_g_work_fetch:
-
 		// reset shares id counter on new job
 		if (strcmp(work.job_id, g_work.job_id))
 			stratum.job.shares_count = 0;
