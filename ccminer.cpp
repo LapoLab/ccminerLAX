@@ -621,83 +621,6 @@ void format_hashrate(double hashrate, char *output)
 		format_hashrate_unit(hashrate, output, "H/s");
 }
 
-/*
- * algo mutex;
- * currently only applies to lyra2Zz, but obviously
- * may be used for other algos 
- * (just make sure to modify opt_algo check as needed here)
- */
-
-algo_mutex_t opt_algo_mutex = {
-	PTHREAD_MUTEX_INITIALIZER, /* mutex */
-
-#ifdef ALGO_MUTEX_ERROR_CODES	
-	0, /* mutex_lock_error */
-	0, /* mutex_unlock_error */
-	0, /* mutex_init_error */
-	0, /* mutex_free_error */
-#endif
-
-	false, /* initialized */
-};
-
-static inline bool algo_mutex_used(void)
-{
-	return opt_algo == ALGO_LYRA2ZZ;
-}
-
-static inline bool algo_mutex_valid(const char * caller)
-{
-	if (!opt_algo_mutex.initialized) {
-		applog(LOG_WARNING, "%s -> %s: mutex not initialized!", caller, __FUNCTION__);
-	}
-
-	return opt_algo_mutex.initialized;
-}
-
-void algo_mutex_init(void)
-{
-	if (algo_mutex_used() && !opt_algo_mutex.initialized) {
-		//pthread_mutex_init(&opt_algo_mutex.mutex, nullptr);
-
-		opt_algo_mutex.initialized = true;
-	}
-}
-
-void algo_mutex_free(void)
-{
-	if (opt_algo_mutex.initialized) {
-		//pthread_mutex_destroy(&opt_algo_mutex.mutex);
-		opt_algo_mutex.initialized = false;
-	}
-}
-
-int algo_mutex_try_lock(void)
-{
-	int error = -1;
-
-	if (algo_mutex_valid(__FUNCTION__)) {
-		error = pthread_mutex_lock(&opt_algo_mutex.mutex);
-	
-		if (error != 0) {
-			applog(LOG_ERR, "%s: could not lock mutex. Error code: %i", __FUNCTION__, error);
-		}
-	} 
-
-	return error;
-}
-
-void algo_mutex_try_unlock(void)
-{
-	if (algo_mutex_valid(__FUNCTION__)) {
-		int error = pthread_mutex_unlock(&opt_algo_mutex.mutex);
-	
-		if (error != 0) {
-			applog(LOG_ERR, "%s: could not unlock mutex. Error code: %i", __FUNCTION__, error);
-		}
-	}
-}
-
 /**
  * Exit app
  */
@@ -740,7 +663,6 @@ void proper_exit(int reason)
 	}
 #endif
 
-	algo_mutex_free();
 
 	free(opt_syslog_pfx);
 	free(opt_api_bind);
@@ -4264,8 +4186,6 @@ int main(int argc, char *argv[])
 		applog(LOG_ERR, "CURL initialization failed");
 		return EXIT_CODE_SW_INIT_ERROR;
 	}
-
-	algo_mutex_init(); /* optional, algo-dependent mutex */
 
 	if (opt_background) {
 #ifndef WIN32

@@ -148,24 +148,6 @@ static const char *algo_names[] = {
 	""
 };
 
-typedef struct algo_mutex {
-	pthread_mutex_t mutex;
-#ifdef ALGO_MUTEX_ERROR_CODES	
-	volatile int mutex_lock_error;
-	volatile int mutex_unlock_error;
-	volatile int mutex_init_error;
-	volatile int mutex_free_error;
-#endif
-	volatile uint8_t initialized;
-} algo_mutex_t;
-
-extern algo_mutex_t opt_algo_mutex;
-
-extern void algo_mutex_init(void);
-extern void algo_mutex_free(void);
-extern int algo_mutex_try_lock(void);
-extern void algo_mutex_try_unlock(void);
-
 // string to int/enum
 static inline int algo_to_int(char* arg)
 {
