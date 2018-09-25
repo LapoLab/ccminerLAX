@@ -893,8 +893,8 @@ void lyra2Z_cpu_init_sm2(int thr_id, uint32_t threads)
 __host__
 void lyra2Z_cpu_free(int thr_id)
 {
-	cudaFree(d_GNonces[thr_id]);
-	cudaFreeHost(h_GNonces[thr_id]);
+	CUDA_SAFE_CALL_PAUSE(cudaFree(d_GNonces[thr_id]));
+	CUDA_SAFE_CALL_PAUSE(cudaFreeHost(h_GNonces[thr_id]));
 }
 
 __host__

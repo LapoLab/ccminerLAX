@@ -27,9 +27,6 @@ __device__ uint32_t __shfl(uint32_t a, uint32_t b, uint32_t c);
 #define __CUDA_ARCH__ 520
 #endif
 
-static uint32_t *h_GNonces[16]; // this need to get fixed as the rest of that routine
-static uint32_t *d_GNonces[16];
-
 #if __CUDA_ARCH__ >= 350
 typedef uint2 * dmatrix_global_t;
 #else
@@ -37,6 +34,9 @@ typedef void * dmatrix_global_t;
 #endif
 
 namespace l2ZZ {
+
+static uint32_t *h_GNonces[16]; // this need to get fixed as the rest of that routine
+static uint32_t *d_GNonces[16];
 
 __constant__ uint32_t pTarget[8];
 
@@ -178,23 +178,23 @@ void lyra2Zz_cpu_init(int thr_id, uint32_t threads, uint64_t *d_matrix)
 {
 	// just assign the device pointer allocated in main loop
 	CUDA_SAFE_CALL_PAUSE(cudaMemcpyToSymbol(l2ZZ::DMatrix, &d_matrix, sizeof(uint64_t*), 0, cudaMemcpyHostToDevice));
-	CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_GNonces[thr_id], 2 * sizeof(uint32_t)));
-	CUDA_SAFE_CALL_PAUSE(cudaMallocHost(&h_GNonces[thr_id], 2 * sizeof(uint32_t)));
+	CUDA_SAFE_CALL_PAUSE(cudaMalloc(&l2ZZ::d_GNonces[thr_id], 2 * sizeof(uint32_t)));
+	CUDA_SAFE_CALL_PAUSE(cudaMallocHost(&l2ZZ::h_GNonces[thr_id], 2 * sizeof(uint32_t)));
 }
 
 __host__
 void lyra2Zz_cpu_init_sm2(int thr_id, uint32_t threads)
 {
 	// just assign the device pointer allocated in main loop
-	CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_GNonces[thr_id], 2 * sizeof(uint32_t)));
-	CUDA_SAFE_CALL_PAUSE(cudaMallocHost(&h_GNonces[thr_id], 2 * sizeof(uint32_t)));
+	CUDA_SAFE_CALL_PAUSE(cudaMalloc(&l2ZZ::d_GNonces[thr_id], 2 * sizeof(uint32_t)));
+	CUDA_SAFE_CALL_PAUSE(cudaMallocHost(&l2ZZ::h_GNonces[thr_id], 2 * sizeof(uint32_t)));
 }
 
 __host__
 void lyra2Zz_cpu_free(int thr_id)
 {
-	CUDA_SAFE_CALL_PAUSE(cudaFree(d_GNonces[thr_id]));
-	CUDA_SAFE_CALL_PAUSE(cudaFreeHost(h_GNonces[thr_id]));
+	CUDA_SAFE_CALL_PAUSE(cudaFree(l2ZZ::d_GNonces[thr_id]));
+	CUDA_SAFE_CALL_PAUSE(cudaFreeHost(l2ZZ::h_GNonces[thr_id]));
 }
 
 __host__
@@ -202,7 +202,7 @@ uint32_t lyra2Zz_getSecNonce(int thr_id, int num)
 {
 	uint32_t results[2];
 	memset(results, 0xFF, sizeof(results));
-	CUDA_SAFE_CALL_PAUSE(cudaMemcpy(results, d_GNonces[thr_id], sizeof(results), cudaMemcpyDeviceToHost));
+	CUDA_SAFE_CALL_PAUSE(cudaMemcpy(results, l2ZZ::d_GNonces[thr_id], sizeof(results), cudaMemcpyDeviceToHost));
 	if (results[1] == results[0])
 		return UINT32_MAX;
 	return results[num];
@@ -218,7 +218,7 @@ __host__
 uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce, uint64_t *d_hash0, bool gtx750ti)
 {
 	uint32_t result = UINT32_MAX;
-	CUDA_SAFE_CALL_PAUSE(cudaMemset(d_GNonces[thr_id], 0xff, 2 * sizeof(uint32_t)));
+	CUDA_SAFE_CALL_PAUSE(cudaMemset(l2ZZ::d_GNonces[thr_id], 0xff, 2 * sizeof(uint32_t)));
 	int dev_id = device_map[thr_id % MAX_GPUS];
 
 	uint32_t tpb = TPB52;
@@ -245,7 +245,7 @@ uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce,
 
 		l2ZZ::sm52::lyra2Zz_gpu_hash_32_2 <<< grid1, block1, 24 * (8 - 0) * sizeof(uint2) * tpb >>> (threads, startNounce, d_hash0);
 		
-		l2ZZ::sm52::lyra2Zz_gpu_hash_32_3 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash0, d_GNonces[thr_id]);
+		l2ZZ::sm52::lyra2Zz_gpu_hash_32_3 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash0, l2ZZ::d_GNonces[thr_id]);
 	}
 	else if (device_sm[dev_id] == 500)
 	{
@@ -262,12 +262,12 @@ uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce,
 
 		l2ZZ::sm50::lyra2Zz_gpu_hash_32_2_sm5 <<< grid1, block1, shared_mem >>> (threads, startNounce, (uint2*)d_hash0);
 
-		l2ZZ::sm50::lyra2Zz_gpu_hash_32_3_sm5 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash0, d_GNonces[thr_id]);
+		l2ZZ::sm50::lyra2Zz_gpu_hash_32_3_sm5 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash0, l2ZZ::d_GNonces[thr_id]);
 	}
 
 	// get first found nonce
-	CUDA_SAFE_CALL_PAUSE(cudaMemcpy(h_GNonces[thr_id], d_GNonces[thr_id], 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost));
-	result = *h_GNonces[thr_id];
+	CUDA_SAFE_CALL_PAUSE(cudaMemcpy(l2ZZ::h_GNonces[thr_id], l2ZZ::d_GNonces[thr_id], 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost));
+	result = *l2ZZ::h_GNonces[thr_id];
 
 	return result;
 }
