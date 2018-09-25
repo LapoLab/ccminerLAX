@@ -55,6 +55,7 @@
 #include "crypto/xmr-rpc.h"
 #include "equi/equihash.h"
 #include "lyra2/Lyra2Zz.h"
+#include "thread_sync.h"
 
 #include <cuda_runtime.h>
 
@@ -663,6 +664,10 @@ void proper_exit(int reason)
 	}
 #endif
 
+	if (opt_miner_thread_sync) {
+		sync_free(opt_miner_thread_sync);
+		free(opt_miner_thread_sync);
+	}
 
 	free(opt_syslog_pfx);
 	free(opt_api_bind);
@@ -4281,6 +4286,11 @@ int main(int argc, char *argv[])
 	if (use_syslog)
 		openlog(opt_syslog_pfx, LOG_PID, LOG_USER);
 #endif
+
+	if (opt_algo == ALGO_LYRA2ZZ) {
+		opt_miner_thread_sync = (struct synchronize *) bzalloc(sizeof(*opt_miner_thread_sync));
+		sync_init(opt_miner_thread_sync);
+	}
 
 	work_restart = (struct work_restart *)calloc(opt_n_threads, sizeof(*work_restart));
 	if (!work_restart)

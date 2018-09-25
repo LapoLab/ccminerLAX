@@ -60,6 +60,14 @@ typedef unsigned __int32 time_t;
 typedef char *  va_list;
 #endif
 
+#ifdef __cplusplus
+#define EXTC_BEGIN extern "C" {
+#define EXTC_END }
+#else
+#define EXTC_BEGIN
+#define EXTC_END 
+#endif
+
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ > 0
 # undef _ALIGN
 # define _ALIGN(x) __align__(x)
