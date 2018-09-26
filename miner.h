@@ -256,6 +256,10 @@ static inline void le16enc(void *pp, uint16_t x)
 }
 #endif
 
+
+
+#define CONV_SIZE_T_TO_U32(sz) (uint32_t)((sz) & 0xFFFFFFFF)
+
 /* used for struct work */
 
 #ifdef USE_SAFE_ALIGNED_CALLOC
@@ -674,6 +678,11 @@ extern void format_hashrate(double hashrate, char *output);
 extern void format_hashrate_unit(double hashrate, char *output, const char* unit);
 extern void applog(int prio, const char *fmt, ...);
 extern void gpulog(int prio, int thr_id, const char *fmt, ...);
+
+#define applog_fn(prio, msg_literal) applog((prio), "[%s] " msg_literal, __FUNCTION__)
+#define applogf_fn(prio, fmt_literal, ...) applog((prio), "[%s] " fmt_literal, __FUNCTION__, __VA_ARGS__)
+#define gpulogf_fn(prio, thr_id, fmt_literal, ...) gpulog((prio), (thr_id), "[%s] " fmt_literal, __FUNCTION__, __VA_ARGS__)
+
 
 void get_defconfig_path(char *out, size_t bufsize, char *argv0);
 extern void chexrev(char *out);

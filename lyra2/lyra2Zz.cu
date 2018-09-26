@@ -13,6 +13,7 @@ extern "C" {
 #include <memory>
 
 #include "thread_sync.h"
+#include "crypt_random.h"
 
 static uint64_t* d_hash[MAX_GPUS];
 static uint64_t* d_matrix[MAX_GPUS];
@@ -293,7 +294,7 @@ static inline void log_shadermodel(int thr_id)
 
 static bool test_hash(int thr_id, uint32_t *input28)
 {
-	size_t start_n = ((size_t)input28[19]) & 0xFFFFFFFF;
+	uint32_t start_n = input28[19];
 
 	uint32_t adata[28];
 
@@ -310,7 +311,7 @@ static bool test_hash(int thr_id, uint32_t *input28)
 
 	uint32_t correct = 0;
 
-	for (size_t thread = 0; thread < throughput; ++thread) {				
+	for (uint32_t thread = 0; thread < throughput; ++thread) {				
 		uint64_t gpu_state_hash[4];
 
 		uint32_t out[8];
@@ -374,32 +375,19 @@ static bool niche_test(int thr_id)
 
 static bool large_test(int thr_id)
 {
-#ifdef _MSC_VER
 	int correct = 0;
 	const int num_tests = 1 << 8;
 
-	LPCSTR cryptname = __FUNCTION__;
-	HCRYPTPROV hCryptProv = NULL;
+	crypt_random rgen;
 
-	if (!CryptAcquireContext(&hCryptProv, cryptname, NULL, PROV_RSA_FULL, CRYPT_NEWKEYSET)) {
-		if (GetLastError() == (DWORD)NTE_EXISTS) {
-			if (!CryptAcquireContext(&hCryptProv, cryptname, NULL, PROV_RSA_FULL, 0))
-				goto ret_crypt_error;
-		} else {
-			goto ret_crypt_error;
-		}
-	}
+	if (!rgen.init())
+		goto ret_crypt_error;
 
 	for (int i = 0; i < num_tests; ++i) {
 		uint32_t adata[28];
 		
-		if (!CryptGenRandom(hCryptProv, sizeof(adata), (BYTE *)&adata[0])) {
-			applog(
-				LOG_WARNING, 
-				__FUNCTION__ " Could not randomly generate buffer for iteration %i. Error: 0x%x\n", 
-				i, 
-				GetLastError()
-			);
+		if (!rgen.gen_random((BYTE *)&adata[0], sizeof(adata))) {
+			applogf_fn(LOG_WARNING, "crypt_random::gen_random failed for iteration %i", i);
 			continue;
 		}
 
@@ -409,19 +397,14 @@ static bool large_test(int thr_id)
 			correct++;
 	}
 
-	CryptReleaseContext(hCryptProv, NULL);
-
 	if (opt_debug)
-		applog(LOG_DEBUG, LYRA2ZZ_LOG_HEADER "[%i] correct/num_tests = %i/%i", thr_id, correct, num_tests);
+		applogf_fn(LOG_DEBUG, "[%i] correct/num_tests = %i/%i", thr_id, correct, num_tests);
 
 	return correct == num_tests;
 
 ret_crypt_error:
-	applog(LOG_ERR, __FUNCTION__ " Could not get windows cryptography context - error returned: 0x%x\n", GetLastError());
-		return false;
-#else
+	applog_fn(LOG_ERR, "error in random number generation");
 	return false;
-#endif
 }
 
 /* Public API */

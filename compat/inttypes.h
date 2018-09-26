@@ -9,8 +9,12 @@
 #endif
 #endif
 
+#ifndef _PFX_64
+#define _PFX_64 "ll"
+#endif
+
 #ifndef PRId64
-#define PRId64 "I64"
+#define PRId64 _PFX_64 "d"
 #endif
 
 #ifndef PRIxPTR

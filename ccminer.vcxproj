@@ -279,6 +279,7 @@
     <ClCompile Include="neoscrypt\neoscrypt.cpp" />
     <ClCompile Include="neoscrypt\neoscrypt-cpu.c" />
     <ClInclude Include="neoscrypt\cuda_vectors.h" />
+    <ClInclude Include="crypt_random.h" />
     <ClInclude Include="statelog.h" />
     <ClInclude Include="thread_sync.h" />
     <ClInclude Include="uint256.h" />
