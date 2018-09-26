@@ -150,39 +150,28 @@ public:
 			bool did_succeed = get_work(&thr_info[thr_id], wcmp);
 			bool cmp_diff = did_succeed && memcmp(curr_work->data + 1, wcmp->data + 1, 32) != 0;
 
-			bool txupdate = false;
-
-			if (!cmp_diff) {
-				cmp_diff = did_succeed && memcmp(curr_work->lyratxs, wcmp->lyratxs, sizeof(curr_work->lyratxs)) != 0;
-				txupdate = cmp_diff;
-			}
-
 			if (!opt_quiet) {
 				if (cmp_diff) {
-					if (txupdate) {
-						gpulog(LOG_INFO, thr_id, LYRA2ZZ_LOG_HEADER "%s", "New transaction information received. Restarting...");
-					} else {
-						char * swd = str_work_data;
-						char * swcd = str_work_data_cmp;
+					char * swd = str_work_data;
+					char * swcd = str_work_data_cmp;
 
-						memset(swd, 0, L2ZZ_LOGSTR_SIZE);
-						memset(swcd, 0, L2ZZ_LOGSTR_SIZE);
+					memset(swd, 0, L2ZZ_LOGSTR_SIZE);
+					memset(swcd, 0, L2ZZ_LOGSTR_SIZE);
 
-						cbin2hex(swd, (const char *)(&curr_work->data[1]), 32);
-						chexrev(swd);
+					cbin2hex(swd, (const char *)(&curr_work->data[1]), 32);
+					chexrev(swd);
 
-						cbin2hex(swcd, (const char *)(&wcmp->data[1]), 32);
-						chexrev(swcd);
+					cbin2hex(swcd, (const char *)(&wcmp->data[1]), 32);
+					chexrev(swcd);
 
-						gpulog(
-							LOG_INFO,
-							thr_id,
-							LYRA2ZZ_LOG_HEADER "\n\n New Header\n"
-							"\tReplacing: %s\n"
-							"\tWith: %s\n", 
-							swd, swcd
-						);
-					}
+					gpulog(
+						LOG_INFO,
+						thr_id,
+						LYRA2ZZ_LOG_HEADER "\n\n New Header\n"
+						"\tReplacing: %s\n"
+						"\tWith: %s\n", 
+						swd, swcd
+					);
 				} else if (did_succeed) {
 					gpulog(
 						LOG_INFO,
@@ -202,7 +191,7 @@ public:
 	}
 };
 
-static std::unique_ptr<l2zz_staleblock_query> g_staleblock_query(nullptr);
+static std::array<std::unique_ptr<l2zz_staleblock_query>, MAX_GPUS> g_staleblock_query;
 
 static std::vector<target_hash> g_targethash;
 
@@ -445,10 +434,10 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	const uint32_t first_nonce = pdata[19];
 	int dev_id = device_map[thr_id];
 
-	if (thr_id == 0 && !opt_benchmark) {
-		if (!g_staleblock_query.get()) {
-			g_staleblock_query.reset(new l2zz_staleblock_query());
-			g_staleblock_query->init();
+	if (!opt_benchmark) {
+		if (!g_staleblock_query[thr_id].get()) {
+			g_staleblock_query[thr_id].reset(new l2zz_staleblock_query());
+			g_staleblock_query[thr_id]->init(thr_id);
 		}
 	}
 
@@ -479,9 +468,9 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 		debug_interval_start = _time64(NULL);
 
 	do {
-		if (thr_id == 0 && !opt_benchmark) {
-			if (g_staleblock_query.get() && g_staleblock_query->stale_block_check(thr_id, work)) {
-				restart_threads();
+		if (!opt_benchmark) {
+			if (g_staleblock_query[thr_id]->stale_block_check(thr_id, work)) {
+				restart_thread(thr_id);
 				break;
 			}
 		}
