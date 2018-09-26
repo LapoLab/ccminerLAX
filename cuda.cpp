@@ -50,6 +50,19 @@ int cuda_num_devices()
 	return GPU_N;
 }
 
+void cuda_safe_call_pause_impl(cudaError_t err, const char * expr, const char * function, int line)
+{
+	if (cudaSuccess != err) {                                         
+		applog(LOG_ERR, "CUDA ERROR: [func: %s][expr: %s][line: %i] : %s", 
+			   function, expr, line, cudaGetErrorString(err) );
+
+		if (!opt_cuda_memcheck) {
+			system("pause");											 
+			exit(EXIT_FAILURE);
+		}
+	}               
+}
+
 int cuda_version()
 {
 	return (int) CUDART_VERSION;
@@ -144,7 +157,20 @@ void cuda_shutdown()
 	// require gpu init first
 	//if (thr_info != NULL)
 	//	cudaDeviceSynchronize();
+
+#ifdef CUDA_SHUTDOWN_ALL
+	for (int i = 0; i < opt_n_threads && i < MAX_GPUS; ++i) {
+		int dev_id = device_map[i];
+		CUDA_SAFE_CALL_PAUSE(cudaSetDevice(dev_id));
+		CUDA_SAFE_CALL_PAUSE(cudaDeviceReset());
+
+		if (opt_debug) {
+			gpulog(LOG_DEBUG, i, "%s: successfully reset device state...", __FUNCTION__);
+		}
+	}
+#else
 	CUDA_SAFE_CALL_PAUSE(cudaDeviceReset());
+#endif
 }
 
 static bool substringsearch(const char *haystack, const char *needle, int &match)
