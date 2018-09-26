@@ -11,6 +11,7 @@ extern "C" {
 #include <miner.h>
 #include <cuda_helper.h>
 #include <memory>
+#include <array>
 
 #include "thread_sync.h"
 #include "crypt_random.h"
@@ -46,20 +47,104 @@ struct target_hash { /* used for logging */
 	uint32_t first_nonce;
 };
 
+#if 0
+template <typename T>
+static T next_pow2(T in)
+{
+	size_t x = (size_t)in;
+
+	x--;
+	x = x | (x >> 1);
+	x = x | (x >> 2);
+	x = x | (x >> 4);
+	x = x | (x >> 8);
+	x = x | (x >> 16);
+
+	if (sizeof(x) == 8) {
+		x = x | (x >> 32);
+	}
+
+	x++;
+
+	return (T) x;
+}
+#endif
+
+template <size_t t_max_slice_intervals>
 class l2zz_update_timer {
 public:
+	static const size_t max_slice_intervals = t_max_slice_intervals; //next_pow2(t_max_slice_intervals);
+	static const size_t interval_mask = max_slice_intervals - 1;
+
+	static const double inv_max_slice_intervals;
+	static const double interval_ema_coeff0;
+	static const double interval_ema_coeff1;
+
+	std::array<long, max_slice_intervals> slice_intervals;
 	struct timeval interval_start;
+	double interval_ema;
+
+	size_t interval_iter;
+	size_t num_intervals;
+	
 	long interval_amt_usec;
 
-	l2zz_update_timer(long amt_msec)
-		:	interval_amt_usec(amt_msec * 1000)
+	int thread;
+
+	l2zz_update_timer(long amt_msec, int thread_)
+		:	interval_ema((double)amt_msec),
+			interval_iter(0),
+			num_intervals(0),
+			interval_amt_usec(amt_msec * 1000),
+			thread(thread_)
 	{
+		slice_intervals.fill(0);
 		gettimeofday(&interval_start, nullptr);
 	}
 
 	long to_usec(struct timeval *in) const
 	{
 		return in->tv_sec * 1000000 + in->tv_usec;
+	}
+
+	void push_interval(long t)
+	{
+		slice_intervals[interval_iter] = t;
+		interval_iter++;
+		num_intervals = min(interval_iter, max_slice_intervals);
+		interval_iter &= interval_mask;
+
+		double avg = 0.0;
+
+		/*	
+		 *	hopefully compiler will loop unroll, 
+		 *	so after we've had max_slice_intervals 
+		 *	amount of queries we get better perf 
+		 */
+
+		if (num_intervals < max_slice_intervals) {
+			for (size_t x = 0; x < num_intervals; ++x) {
+				avg += (double)slice_intervals[x];
+			}
+			avg = avg / (double)num_intervals;
+		} else {
+			for (auto x: slice_intervals) {
+				avg += (double)x;
+			}
+			avg *= inv_max_slice_intervals;
+		}
+
+		auto tmp = interval_ema;
+		tmp = avg * interval_ema_coeff0 + interval_ema * interval_ema_coeff1;
+		interval_amt_usec = (long)interval_ema;
+		interval_ema = tmp;
+	
+		if (opt_debug) {
+			gpulogf_fn(
+				LOG_DEBUG, 
+				thread, 
+				"New interval (usec): %ll", interval_amt_usec);
+		}
 	}
 
 	bool query()
@@ -72,6 +157,8 @@ public:
 		long diff_usec = to_usec(&diff_res);
 		bool r = diff_usec >= interval_amt_usec && !neg; 
 
+		if (r) push_interval(diff_usec);
+
 		interval_start.tv_sec = r ? test.tv_sec : interval_start.tv_sec;
 		interval_start.tv_usec = r ? test.tv_usec : interval_start.tv_usec;
 
@@ -79,15 +166,26 @@ public:
 	}
 };
 
+template <size_t max>
+const double l2zz_update_timer<max>::inv_max_slice_intervals = 1.0 / (double)max;
+
+template <size_t max>
+const double l2zz_update_timer<max>::interval_ema_coeff0 = 2.0 / (double)(max + 1);
+
+template <size_t max>
+const double l2zz_update_timer<max>::interval_ema_coeff1 = 1.0 - l2zz_update_timer<max>::interval_ema_coeff0;
+
 #define L2ZZ_LOGSTR_SIZE (sizeof(char) * ((LYRA2ZZ_BLOCK_HEADER_LEN_BYTES << 1) + 1))
 
 class l2zz_staleblock_query 
 {
 public:
+	using l2zz_timer_t = l2zz_update_timer<64>;
+
 	struct work * work_cmp;
 	char * str_work_data;
 	char * str_work_data_cmp;
-	l2zz_update_timer * timer;
+	std::unique_ptr<l2zz_timer_t> timer;
 
 	l2zz_staleblock_query(void)
 		:	work_cmp(nullptr),
@@ -104,15 +202,15 @@ public:
 
 	bool valid(void) const
 	{
-		return str_work_data && str_work_data_cmp && work_cmp && timer;
+		return str_work_data && str_work_data_cmp && work_cmp && timer.get();
 	}
 
-	bool init(void)
+	bool init(int thr_id)
 	{
 		bool log = !valid() && !opt_quiet && opt_debug;
 
-		if (!timer) {
-			timer = new l2zz_update_timer(30000);
+		if (!timer.get()) {
+			timer.reset(new l2zz_timer_t(30000, thr_id));
 		}
 
 		maybe_try_aligned_calloc_or_retfalse(work_cmp, struct work, sizeof (struct work));
@@ -132,10 +230,7 @@ public:
 		safe_free(str_work_data);
 		safe_free(str_work_data_cmp);
 
-		if (timer) {
-			delete timer;
-			timer = nullptr;
-		}
+		timer.reset();
 
 		applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "%s","freed memory");
 	}
