@@ -681,7 +681,7 @@ extern void gpulog(int prio, int thr_id, const char *fmt, ...);
 
 #define applog_fn(prio, msg_literal) applog((prio), "[%s] " msg_literal, __FUNCTION__)
 #define applogf_fn(prio, fmt_literal, ...) applog((prio), "[%s] " fmt_literal, __FUNCTION__, __VA_ARGS__)
-#define gpulogf_fn(prio, thr_id, fmt_literal, ...) gpulog((prio), (thr_id), "[%s] " fmt_literal, __FUNCTION__, __VA_ARGS__)
+#define gpulogf_fn(prio, thr_id, fmt_literal, ...) gpulog((prio), (thr_id), "[" __FUNCTION__ "]" fmt_literal, __VA_ARGS__)
 
 
 void get_defconfig_path(char *out, size_t bufsize, char *argv0);
