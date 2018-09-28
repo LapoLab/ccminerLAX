@@ -47,108 +47,17 @@ struct target_hash { /* used for logging */
 	uint32_t first_nonce;
 };
 
-#if 0
-template <typename T>
-static T next_pow2(T in)
-{
-	size_t x = (size_t)in;
-
-	x--;
-	x = x | (x >> 1);
-	x = x | (x >> 2);
-	x = x | (x >> 4);
-	x = x | (x >> 8);
-	x = x | (x >> 16);
-
-	if (sizeof(x) == 8) {
-		x = x | (x >> 32);
-	}
-
-	x++;
-
-	return (T) x;
-}
-#endif
-
-template <size_t t_max_slice_intervals>
 class l2zz_update_timer {
 public:
-	static const size_t max_slice_intervals = t_max_slice_intervals; //next_pow2(t_max_slice_intervals);
-	static const size_t interval_mask = max_slice_intervals - 1;
-
-	const double inv_max_slice_intervals;
-	const double interval_ema_coeff0;
-	const double interval_ema_coeff1;
-
-	std::array<long, max_slice_intervals> slice_intervals;
-	struct timeval interval_start;
-	double interval_ema;
-
-	size_t interval_iter;
-	size_t num_intervals;
-	
-	long interval_amt_usec;
-
 	int thread;
 
-	l2zz_update_timer(long amt_msec, int thread_)
-		:	
-			inv_max_slice_intervals(1.0 / (double)max_slice_intervals),
-			interval_ema_coeff0(2.0 / (double)(max_slice_intervals + 1)),
-			interval_ema_coeff1(1.0 - interval_ema_coeff0),
-			interval_ema((double) (amt_msec * 1000)),
-			interval_iter(0),
-			num_intervals(0),
-			interval_amt_usec(amt_msec * 1000),
-			thread(thread_)
+	l2zz_update_timer(int thread_)
+		: thread(thread_)
+	{}
+
+	bool in_range(long x, long a, long b) const
 	{
-		slice_intervals.fill(0);
-		gettimeofday(&interval_start, nullptr);
-	}
-
-	long to_usec(struct timeval *in) const
-	{
-		return in->tv_sec * 1000000 + in->tv_usec;
-	}
-
-	void push_interval(long t)
-	{
-		slice_intervals[interval_iter] = t;
-		interval_iter++;
-		num_intervals = min(interval_iter, max_slice_intervals);
-		interval_iter &= interval_mask;
-
-		double avg = 0.0;
-
-		/*	
-		 *	hopefully compiler will loop unroll, 
-		 *	so after we've had max_slice_intervals 
-		 *	amount of queries we get better perf 
-		 */
-
-		if (num_intervals < max_slice_intervals) {
-			for (size_t x = 0; x < num_intervals; ++x) {
-				avg += (double)slice_intervals[x];
-			}
-			avg = avg / (double)num_intervals;
-		} else {
-			for (auto x: slice_intervals) {
-				avg += (double)x;
-			}
-			avg *= inv_max_slice_intervals;
-		}
-
-		auto tmp = interval_ema;
-		tmp = avg * interval_ema_coeff0 + interval_ema * interval_ema_coeff1;
-		interval_amt_usec = (long)tmp;
-		interval_ema = tmp;
-	
-		if (opt_debug) {
-			#ifdef _WIN64
-				gpulogf_fn(LOG_DEBUG, thread, "interval_amt_usec: %lld" "; interval_ema_coeff0: %f; interval_ema_coeff1: %f",
-							   interval_amt_usec, interval_ema_coeff0, interval_ema_coeff1);
-			#endif
-		}
+		return a <= x && x <= b;
 	}
 
 	bool query()
@@ -156,15 +65,11 @@ public:
 		struct timeval test;
 		gettimeofday(&test, nullptr);
 
-		struct timeval diff_res;
-		bool neg = timeval_subtract(&diff_res, &test, &interval_start);
-		long diff_usec = to_usec(&diff_res);
-		bool r = diff_usec >= interval_amt_usec && !neg; 
+		const long seconds_per_day = 86400;
+		const long elapsed_today = test.tv_sec % seconds_per_day;		
+		const long s = elapsed_today % 60;
 
-		if (r) push_interval(diff_usec);
-
-		interval_start.tv_sec = r ? test.tv_sec : interval_start.tv_sec;
-		interval_start.tv_usec = r ? test.tv_usec : interval_start.tv_usec;
+		bool r = ((s == 59 || in_range(s, 0, 1)) || in_range(s, 29, 31)); 
 
 		return r;
 	}
@@ -175,7 +80,7 @@ public:
 class l2zz_staleblock_query 
 {
 public:
-	using l2zz_timer_t = l2zz_update_timer<64>;
+	using l2zz_timer_t = l2zz_update_timer;
 
 	struct work * work_cmp;
 	char * str_work_data;
@@ -205,7 +110,7 @@ public:
 		bool log = !valid() && !opt_quiet && opt_debug;
 
 		if (!timer.get()) {
-			timer.reset(new l2zz_timer_t(30000, thr_id));
+			timer.reset(new l2zz_timer_t(thr_id));
 		}
 
 		maybe_try_aligned_calloc_or_retfalse(work_cmp, struct work, sizeof (struct work));
@@ -264,12 +169,14 @@ public:
 						swd, swcd
 					);
 				} else if (did_succeed) {
-					gpulog(
-						LOG_INFO,
-						thr_id,
-						LYRA2ZZ_LOG_HEADER  
-						"%s", "No change detected yet..."
-					);
+					if (opt_debug) {
+						gpulog(
+							LOG_DEBUG,
+							thr_id,
+							LYRA2ZZ_LOG_HEADER  
+							"%s", "No change detected yet..."
+						);
+					}
 				} else {
 					gpulog(LOG_ERR, thr_id, LYRA2ZZ_LOG_HEADER "%s", "get_work failed...");
 				}
