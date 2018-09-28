@@ -76,9 +76,9 @@ public:
 	static const size_t max_slice_intervals = t_max_slice_intervals; //next_pow2(t_max_slice_intervals);
 	static const size_t interval_mask = max_slice_intervals - 1;
 
-	static const double inv_max_slice_intervals;
-	static const double interval_ema_coeff0;
-	static const double interval_ema_coeff1;
+	const double inv_max_slice_intervals;
+	const double interval_ema_coeff0;
+	const double interval_ema_coeff1;
 
 	std::array<long, max_slice_intervals> slice_intervals;
 	struct timeval interval_start;
@@ -92,7 +92,11 @@ public:
 	int thread;
 
 	l2zz_update_timer(long amt_msec, int thread_)
-		:	interval_ema((double)amt_msec),
+		:	
+			inv_max_slice_intervals(1.0 / (double)max_slice_intervals),
+			interval_ema_coeff0(2.0 / (double)(max_slice_intervals + 1)),
+			interval_ema_coeff1(1.0 - interval_ema_coeff0),
+			interval_ema((double) (amt_msec * 1000)),
 			interval_iter(0),
 			num_intervals(0),
 			interval_amt_usec(amt_msec * 1000),
@@ -136,14 +140,14 @@ public:
 
 		auto tmp = interval_ema;
 		tmp = avg * interval_ema_coeff0 + interval_ema * interval_ema_coeff1;
-		interval_amt_usec = (long)interval_ema;
+		interval_amt_usec = (long)tmp;
 		interval_ema = tmp;
 	
 		if (opt_debug) {
-			gpulogf_fn(
-				LOG_DEBUG, 
-				thread, 
-				"New interval (usec): %ll", interval_amt_usec);
+			#ifdef _WIN64
+				gpulogf_fn(LOG_DEBUG, thread, "interval_amt_usec: %lld" "; interval_ema_coeff0: %f; interval_ema_coeff1: %f",
+							   interval_amt_usec, interval_ema_coeff0, interval_ema_coeff1);
+			#endif
 		}
 	}
 
@@ -165,15 +169,6 @@ public:
 		return r;
 	}
 };
-
-template <size_t max>
-const double l2zz_update_timer<max>::inv_max_slice_intervals = 1.0 / (double)max;
-
-template <size_t max>
-const double l2zz_update_timer<max>::interval_ema_coeff0 = 2.0 / (double)(max + 1);
-
-template <size_t max>
-const double l2zz_update_timer<max>::interval_ema_coeff1 = 1.0 - l2zz_update_timer<max>::interval_ema_coeff0;
 
 #define L2ZZ_LOGSTR_SIZE (sizeof(char) * ((LYRA2ZZ_BLOCK_HEADER_LEN_BYTES << 1) + 1))
 
