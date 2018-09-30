@@ -140,11 +140,23 @@ public:
 		if (!valid())
 			return false;
 
+		static const bool log_no_change = false;
+
+		static const char * reason[2] = {
+			"height diff",
+			"block diff"
+		};
+
 		struct work * wcmp = work_cmp;
 
 		if (timer->query()) {
 			bool did_succeed = get_work(&thr_info[thr_id], wcmp);
-			bool cmp_diff = did_succeed && memcmp(curr_work->data + 1, wcmp->data + 1, 32) != 0;
+			bool height_diff = wcmp->height != curr_work->height;
+			bool cmp_diff = did_succeed && height_diff;
+
+			if (!height_diff && did_succeed) {
+				cmp_diff = memcmp(curr_work->data + 1, wcmp->data + 1, 32) != 0;
+			}
 
 			if (!opt_quiet) {
 				if (cmp_diff) {
@@ -165,11 +177,13 @@ public:
 						thr_id,
 						LYRA2ZZ_LOG_HEADER "\n\n New Header\n"
 						"\tReplacing: %s\n"
-						"\tWith: %s\n", 
-						swd, swcd
+						"\tWith: %s\n"
+						"\tReason: %s\n", 
+						swd, swcd,
+						height_diff ? reason[0] : reason[1]
 					);
 				} else if (did_succeed) {
-					if (opt_debug) {
+					if (opt_debug && log_no_change) {
 						gpulog(
 							LOG_DEBUG,
 							thr_id,
