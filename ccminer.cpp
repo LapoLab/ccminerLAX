@@ -108,7 +108,7 @@ int opt_print_interval = OPT_PRINT_INTERVAL_UNSET;
 int opt_device_shader_model = OPT_DEVICE_SHADER_MODEL_UNSET;
 
 bool opt_cuda_memcheck = false;
-
+bool opt_cuda_profiler = false;
 bool opt_protocol = false;
 bool opt_benchmark = false;
 bool opt_showdiff = true;
@@ -328,7 +328,6 @@ Options:\n\
 			x17         X17\n\
 			wildkeccak  Boolberry\n\
 			zr5         ZR5 (ZiftrCoin)\n\
-	  --cuda-memcheck   Run this when running under cuda's memcheck utility\n\
   -d, --devices         Comma separated list of CUDA devices to use.\n\
                         Device IDs start counting from 0! Alternatively takes\n\
                         string names of your cards like gtx780ti or gt640#2\n\
@@ -336,6 +335,9 @@ Options:\n\
   -i  --intensity=N[,N] GPU intensity 8.0-25.0 (default: auto) \n\
                         Decimals are allowed for fine tuning \n\
       --cuda-schedule   Set device threads scheduling mode (default: auto)\n\
+	  --cuda-memcheck   Use this when running under cuda's memcheck utility\n\
+      --cuda-profiler   This is meant to be used when the app is being run by Nvidia Visual Profiler\n\
+                                                                                                     \n\
   -f, --diff-factor     Divide difficulty by this factor (default 1.0) \n\
   -m, --diff-multiplier Multiply difficulty by this value (default 1.0) \n\
   -M, --print-interval  Arbitrary interval used for debugging (supported by those who wish to use it) \n\
@@ -435,6 +437,7 @@ struct option options[] = {
 	{ "cpu-priority", 1, NULL, 1021 },
 	{ "cuda-schedule", 1, NULL, 1025 },
 	{ "cuda-memcheck", 0, NULL, 1026 },
+	{ "cuda-profiler", 0, NULL, 1027 },
 	{ "debug", 0, NULL, 'D' },
 	{ "help", 0, NULL, 'h' },
 	{ "intensity", 1, NULL, 'i' },
@@ -678,6 +681,7 @@ void proper_exit(int reason)
 	free(opt_api_mcast_des);
 	//free(work_restart);
 	//free(thr_info);
+
 	exit(reason);
 }
 
@@ -3758,8 +3762,11 @@ void parse_arg(int key, char *arg)
 	case 1025: // cuda-schedule
 		opt_cudaschedule = atoi(arg);
 		break;
-	case 1026:
+	case 1026: // cuda-memcheck
 		opt_cuda_memcheck = true;
+		break;
+	case 1027: // cuda-profiler
+		opt_cuda_profiler = true;
 		break;
 	case 1060: // max-temp
 		d = atof(arg);

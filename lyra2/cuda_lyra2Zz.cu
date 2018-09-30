@@ -8,6 +8,9 @@
 #include <stdio.h>
 #include <memory.h>
 #include <stdint.h>
+#include <cuda_profiler_api.h>
+
+#include "miner.h"
 
 #define TPB52 32
 #define TPB50 32
@@ -239,6 +242,11 @@ uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce,
 	
 	//gtx750ti = true;
 
+	if (opt_cuda_profiler) {
+		applogf_debug_fn("%s", "starting profiler");
+		CUDA_SAFE_CALL_PAUSE(cudaProfilerStart());
+	}
+
 	if (device_sm[dev_id] >= 520)
 	{
 		l2ZZ::sm52::lyra2Zz_gpu_hash_32_1 <<< grid2, block2 >>> (threads, startNounce, (uint2*)d_hash0);
@@ -268,6 +276,11 @@ uint32_t lyra2Zz_cpu_hash_32(int thr_id, uint32_t threads, uint32_t startNounce,
 	// get first found nonce
 	CUDA_SAFE_CALL_PAUSE(cudaMemcpy(l2ZZ::h_GNonces[thr_id], l2ZZ::d_GNonces[thr_id], 1 * sizeof(uint32_t), cudaMemcpyDeviceToHost));
 	result = *l2ZZ::h_GNonces[thr_id];
+
+	if (opt_cuda_profiler) {
+		applogf_debug_fn("%s", "stopping profiler");
+		cudaProfilerStop();
+	}
 
 	return result;
 }
