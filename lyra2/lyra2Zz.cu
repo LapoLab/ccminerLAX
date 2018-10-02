@@ -37,8 +37,6 @@ extern void lyra2Z_hash_112(void *state, const void *input);
 
 extern bool get_work(struct thr_info *thr, struct work *work);
 
-
-
 struct target_hash { /* used for logging */
 	uint32_t target;
 	uint32_t vhash;
@@ -209,12 +207,6 @@ static std::vector<target_hash> g_targethash;
 static bool init[MAX_GPUS] = { 0 };
 static __thread uint32_t throughput = 0;
 static __thread bool gtx750ti = false;
-static __thread size_t d_matrix_size = 0;
-
-static size_t d_hash_size_bytes() 
-{ 
-	return (size_t)32 * throughput; 
-}
 
 static int maybe_init_thread_data(int thr_id, int dev_id, uint32_t max_nonce, uint32_t first_nonce)
 {
@@ -244,7 +236,6 @@ static int maybe_init_thread_data(int thr_id, int dev_id, uint32_t max_nonce, ui
 	blake256_cpu_init(thr_id, throughput);
 
 	size_t matrix_sz = device_sm[dev_id] > 500 ? sizeof(uint64_t) * 4 * 4 : sizeof(uint64_t) * 8 * 8 * 3 * 4;
-	d_matrix_size = matrix_sz;
 
 	if (device_sm[dev_id] >= 500) {
 		CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
@@ -255,7 +246,7 @@ static int maybe_init_thread_data(int thr_id, int dev_id, uint32_t max_nonce, ui
 
 		return false;
 	}
-	CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_hash[thr_id], d_hash_size_bytes()));
+	CUDA_SAFE_CALL_PAUSE(cudaMalloc(&d_hash[thr_id], (size_t)32 * throughput));
 
 	init[thr_id] = true;	
 	return true;
@@ -344,6 +335,7 @@ static bool test_hash(int thr_id, uint32_t *input28)
 	return correct == throughput;
 }
 
+#if 0
 static bool niche_test(int thr_id)
 {
 	uint32_t testinput[28] = {
@@ -382,6 +374,7 @@ static bool niche_test(int thr_id)
 
 	return test_hash(thr_id, testinput);
 }
+#endif
 
 static bool large_test(int thr_id)
 {

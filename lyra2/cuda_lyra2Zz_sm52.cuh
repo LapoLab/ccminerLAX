@@ -442,7 +442,7 @@ void reduceDuplexRowt_8_v2(const int rowIn, const int rowOut, const int rowInOut
 static __device__ __forceinline__
 void reduceDuplexRowt_8_v2_l2zz(const int rowIn, const int rowOut, const int rowInOut, uint2* state, const uint32_t thread, const uint32_t threads)
 {
-	uint2 state1[3], state2[3], last[3];
+	uint2 state1[3], state2[3]/*, last[3]*/;
 
 //	LD4S(state1, rowIn, 0, thread, threads);
 //	LD4S(last, rowInOut, 0, thread, threads);

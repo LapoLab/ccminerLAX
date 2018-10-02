@@ -62,7 +62,6 @@ extern "C" void lyra2Z_hash_112(void *state, const void *input)
 static bool init[MAX_GPUS] = { 0 };
 static __thread uint32_t throughput = 0;
 static __thread bool gtx750ti = false;
-static __thread size_t d_matrix_size = 0;
 
 static size_t d_hash_size_bytes() 
 { 
@@ -110,11 +109,6 @@ static void maybe_report_bad_nonce(int thr_id, uint32_t target, uint32_t vhash, 
 					first_nonce, target, nonce_ret, vhash);
 }
 
-static inline void log_shadermodel(int thr_id)
-{
-	gpulog(LOG_BLUE, thr_id, "Device shader model: %i", device_sm[thr_id % MAX_GPUS]);
-}
-
 extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done)
 {
 	uint32_t *pdata = work->data;
@@ -154,7 +148,6 @@ extern "C" int scanhash_lyra2Z(int thr_id, struct work* work, uint32_t max_nonce
 		if (device_sm[dev_id] >= 350)
 		{
 			size_t matrix_sz = device_sm[dev_id] > 500 ? sizeof(uint64_t) * 4 * 4 : sizeof(uint64_t) * 8 * 8 * 3 * 4;
-			d_matrix_size = matrix_sz;
 			CUDA_SAFE_CALL(cudaMalloc(&d_matrix[thr_id], matrix_sz * throughput));
 			lyra2Z_cpu_init(thr_id, throughput, d_matrix[thr_id]);
 		}
