@@ -685,6 +685,17 @@ extern void gpulog(int prio, int thr_id, const char *fmt, ...);
 #define applogf_debug_fn(fmt_literal, ...) if (opt_debug) { applogf_fn(LOG_DEBUG, fmt_literal, __VA_ARGS__); }
 #define gpulogf_fn(prio, thr_id, fmt_literal, ...) gpulog((prio), (thr_id), "[" __FUNCTION__ "]" fmt_literal, __VA_ARGS__)
 
+#define applog_debug_json(j) do {														\
+	if (opt_debug) {																	\
+		char * util_log_json_s = json_dumps((j), JSON_ENCODE_ANY);						\
+		if (util_log_json_s) {															\
+			applog(LOG_DEBUG, "[%s:%i]\n%s\n", __FUNCTION__, __LINE__, util_log_json_s);\
+			free(util_log_json_s);														\
+		} else {																		\
+			applog(LOG_DEBUG, "[%s:%i]\nCOULD NOT ENCODE\n", __FUNCTION__, __LINE__);	\
+		}																				\
+	}																					\
+} while (0)
 
 void get_defconfig_path(char *out, size_t bufsize, char *argv0);
 extern void chexrev(char *out);
