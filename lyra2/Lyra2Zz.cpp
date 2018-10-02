@@ -1600,7 +1600,7 @@ int lyra2Zz_gbt_work_decode(CURL *curl, const json_t *val, struct work *work)
 
 		for (size_t i = 0; i < len; ++i) {
 			if (txs[i].size() > LYRA_MAX_TX_SZ) {
-				applog(LOG_ERR, LYRA2ZZ_LOG_HEADER, "Transaction Fetched Size[%u] %u > Max Size %u", 
+				applogf_fn(LOG_ERR, "Transaction Fetched Size[%u] %u > Max Size %u", 
 					i, txs[i].size(), LYRA_MAX_TX_SZ);
 	
 				return false;
