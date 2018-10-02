@@ -15,6 +15,8 @@ extern "C" {
 
 #include "libbase58.h"
 
+extern pthread_mutex_t stratum_work_lock;
+
 /* auto generated */
 const char *l2zz_opcode_table[] = {
 			"OP_0|OP_FALSE", 		NULL, 		NULL, 		NULL, 		NULL, 		NULL, 		NULL, 		NULL, 		NULL, 		NULL, 		NULL, 		NULL, 		NULL, 		NULL, 		NULL, 		NULL, 
@@ -1619,20 +1621,48 @@ int lyra2Zz_gbt_work_decode(CURL *curl, const json_t *val, struct work *work)
 	return true;
 }
 
+/**
+ * (copypasta from getblocheight:util.cpp)
+ *
+ * Extract bloc height     L H... here len=3, height=0x1333e8
+ * "...0000000000ffffffff2703e83313062f503253482f043d61105408"
+ */
+static uint32_t l2zz_getblock_height(struct stratum_ctx *sctx)
+{
+	uint32_t height = 0;
+	uint8_t hlen = 0, *p, *m;
+
+	// find 0xffff tag
+	p = (uint8_t*) sctx->job.coinbase + 32;
+	m = p + 128;
+	while (*p != 0xff && p < m) p++;
+	while (*p == 0xff && p < m) p++;
+	if (*(p-1) == 0xff && *(p-2) == 0xff) {
+		p++; hlen = *p;
+		p++; height = le16dec(p);
+		p += 2;
+		switch (hlen) {
+			case 4:
+				height += 0x10000UL * le16dec(p);
+				break;
+			case 3:
+				height += 0x10000UL * (*p);
+				break;
+		}
+	}
+	return height;
+}
+
 int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 {
 	const char *job_id, *prevhash, *coinb1, *coinb2, *version, *nbits, *stime;
-	const char *claim = NULL, *nreward = NULL, *accumcheckpoint = NULL; /* accumcheckpoint is lyra2zz */
+	const char *claim = NULL, /**nreward = NULL,*/ *accumcheckpoint = NULL; /* accumcheckpoint is lyra2zz */
 	size_t coinb1_size, coinb2_size;
 	bool clean, ret = false;
 	int merkle_count, i, p=0;
 	json_t *merkle_arr;
 	uchar **merkle = NULL;
 	int ntime;
-
-	if (opt_algo == ALGO_LYRA2ZZ) {
-		return lyra2Zz_stratum_notify(sctx, params);
-	}
 
 	job_id = json_string_value(json_array_get(params, p++));
 	prevhash = json_string_value(json_array_get(params, p++));
@@ -1647,12 +1677,13 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	nbits = json_string_value(json_array_get(params, p++));
 	stime = json_string_value(json_array_get(params, p++));
 	clean = json_is_true(json_array_get(params, p)); p++;
-	nreward = json_string_value(json_array_get(params, p++));
+	//nreward = json_string_value(json_array_get(params, p++));
+	accumcheckpoint = json_string_value(json_array_get(params, p++));
 
 	if (!job_id || !prevhash || !coinb1 || !coinb2 || !version || !nbits || !stime ||
 	    strlen(prevhash) != 64 || strlen(version) != 8 ||
-	    strlen(nbits) != 8 || strlen(stime) != 8) {
-		applog(LOG_ERR, "Stratum notify: invalid parameters");
+	    strlen(nbits) != 8 || strlen(stime) != 8 || !accumcheckpoint) {
+		applog_fn(LOG_ERR, "invalid parameters...");
 		goto out;
 	}
 
@@ -1662,7 +1693,7 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	if (ntime > sctx->srvtime_diff) {
 		sctx->srvtime_diff = ntime;
 		if (opt_protocol && ntime > 20)
-			applog(LOG_DEBUG, "stratum time is at least %ds in the future", ntime);
+			applogf_fn(LOG_DEBUG, "stratum time is at least %ds in the future", ntime);
 	}
 
 	if (merkle_count)
@@ -1673,7 +1704,7 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 			while (i--)
 				free(merkle[i]);
 			free(merkle);
-			applog(LOG_ERR, "Stratum notify: invalid Merkle branch");
+			applog_fn(LOG_ERR, "invalid Merkle branch");
 			goto out;
 		}
 		merkle[i] = (uchar*) malloc(32);
@@ -1700,7 +1731,7 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	sctx->job.job_id = strdup(job_id);
 	hex2bin(sctx->job.prevhash, prevhash, 32);
 
-	sctx->job.height = getblocheight(sctx);
+	sctx->job.height = l2zz_getblock_height(sctx);
 
 	for (i = 0; i < sctx->job.merkle_count; i++)
 		free(sctx->job.merkle[i]);
@@ -1711,14 +1742,16 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	hex2bin(sctx->job.version, version, 4);
 	hex2bin(sctx->job.nbits, nbits, 4);
 	hex2bin(sctx->job.ntime, stime, 4);
-	if(nreward != NULL)
+/*	if(nreward != NULL)
 	{
 		if(strlen(nreward) == 4)
 			hex2bin(sctx->job.nreward, nreward, 2);
-	}
+	}*/
 	sctx->job.clean = clean;
 
 	sctx->job.diff = sctx->next_diff;
+	
+	hex2bin(sctx->job.accumulatorcheckpoint, accumcheckpoint, 32);
 
 	pthread_mutex_unlock(&stratum_work_lock);
 
