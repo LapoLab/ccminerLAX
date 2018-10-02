@@ -1628,12 +1628,7 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	int merkle_count, i, p=0;
 	json_t *merkle_arr;
 	uchar **merkle = NULL;
-	// uchar(*merkle_tree)[32] = { 0 };
 	int ntime;
-
-	if (sctx->is_equihash) {
-		return equi_stratum_notify(sctx, params);
-	}
 
 	if (opt_algo == ALGO_LYRA2ZZ) {
 		return lyra2Zz_stratum_notify(sctx, params);
