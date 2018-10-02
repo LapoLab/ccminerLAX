@@ -1656,7 +1656,7 @@ static uint32_t l2zz_getblock_height(struct stratum_ctx *sctx)
 int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 {
 	const char *job_id, *prevhash, *coinb1, *coinb2, *version, *nbits, *stime;
-	const char *claim = NULL, /**nreward = NULL,*/ *accumcheckpoint = NULL; /* accumcheckpoint is lyra2zz */
+	const char *claim = NULL, *accumcheckpoint = NULL; /* accumcheckpoint is lyra2zz */
 	size_t coinb1_size, coinb2_size;
 	bool clean, ret = false;
 	int merkle_count, i, p=0;
@@ -1677,7 +1677,6 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	nbits = json_string_value(json_array_get(params, p++));
 	stime = json_string_value(json_array_get(params, p++));
 	clean = json_is_true(json_array_get(params, p)); p++;
-	//nreward = json_string_value(json_array_get(params, p++));
 	accumcheckpoint = json_string_value(json_array_get(params, p++));
 
 	if (!job_id || !prevhash || !coinb1 || !coinb2 || !version || !nbits || !stime ||
@@ -1742,11 +1741,7 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	hex2bin(sctx->job.version, version, 4);
 	hex2bin(sctx->job.nbits, nbits, 4);
 	hex2bin(sctx->job.ntime, stime, 4);
-/*	if(nreward != NULL)
-	{
-		if(strlen(nreward) == 4)
-			hex2bin(sctx->job.nreward, nreward, 2);
-	}*/
+
 	sctx->job.clean = clean;
 
 	sctx->job.diff = sctx->next_diff;
