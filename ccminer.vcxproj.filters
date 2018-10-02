@@ -369,9 +369,6 @@
     <ClCompile Include="statelog.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="thread_sync.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="algos.h">
@@ -637,9 +634,6 @@
     </ClInclude>
     <ClInclude Include="lyra2\cuda_lyra2Zz_sm52.cuh">
       <Filter>Source Files\CUDA\lyra2</Filter>
-    </ClInclude>
-    <ClInclude Include="thread_sync.h">
-      <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="crypt_random.h">
       <Filter>Header Files</Filter>

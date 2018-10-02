@@ -13,7 +13,6 @@ extern "C" {
 #include <memory>
 #include <array>
 
-#include "thread_sync.h"
 #include "crypt_random.h"
 
 static uint64_t* d_hash[MAX_GPUS];
@@ -442,8 +441,6 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 
 	if (!maybe_init_thread_data(thr_id, dev_id, max_nonce, first_nonce))
 		return 0;
-
-	sync_set_wait_reset(opt_miner_thread_sync);
 	
 	for (int k=0; k < 28; k++) {
 		be32enc(&endiandata[k], pdata[k]);
