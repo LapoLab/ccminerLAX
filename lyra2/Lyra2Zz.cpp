@@ -1670,8 +1670,12 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	coinb1 = json_string_value(json_array_get(params, p++));
 	coinb2 = json_string_value(json_array_get(params, p++));
 	merkle_arr = json_array_get(params, p++);
-	if (!merkle_arr || !json_is_array(merkle_arr))
+
+	if (!merkle_arr || !json_is_array(merkle_arr)) {
+		applog_fn(LOG_ERR, "invalid merkle array received.");
 		goto out;
+	}
+
 	merkle_count = (int) json_array_size(merkle_arr);
 	version = json_string_value(json_array_get(params, p++));
 	nbits = json_string_value(json_array_get(params, p++));
@@ -1682,8 +1686,34 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	if (!job_id || !prevhash || !coinb1 || !coinb2 || !version || !nbits || !stime ||
 	    strlen(prevhash) != 64 || strlen(version) != 8 ||
 	    strlen(nbits) != 8 || strlen(stime) != 8 || !accumcheckpoint) {
-		applog_fn(LOG_ERR, "invalid parameters...");
+		applog_fn(LOG_ERR, "invalid parameters.");
 		goto out;
+	}
+
+	if (opt_debug) {
+		std::stringstream dbg_merkle_str;
+
+		for (int i = 0; i < merkle_count; ++i) {
+			dbg_merkle_str << "\t\t[" << i << "] " << json_string_value(json_array_get(merkle_arr, i)) << "\n";
+		}
+
+		applogf_fn(
+			LOG_DEBUG, 
+			"Received:\n"
+			"\tjob_id: %s\n"
+			"\tprevhash: %s\n"
+			"\tcoinbase1: %s\n"
+			"\tcoinbase2: %s\n"
+			"\tmerkle_arr: %s\n"
+			"\tmerkle_count: %i"
+			"\tversion: %s\n"
+			"\tnbits: %s\n"
+			"\tstime: %s\n"
+			"\tclean: %s\n"
+			"\taccumcheckpoint: %s\n",
+			job_id, prevhash, coinb1, coinb2, dbg_merkle_str.str().c_str(), merkle_count, 
+			version, nbits, stime, clean ? "true" : "false", accumcheckpoint
+		);
 	}
 
 	/* store stratum server time diff */
@@ -1703,7 +1733,7 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 			while (i--)
 				free(merkle[i]);
 			free(merkle);
-			applog_fn(LOG_ERR, "invalid Merkle branch");
+			applog_fn(LOG_ERR, "invalid merkle branch");
 			goto out;
 		}
 		merkle[i] = (uchar*) malloc(32);
