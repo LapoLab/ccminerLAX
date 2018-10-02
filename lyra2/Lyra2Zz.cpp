@@ -1630,9 +1630,6 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	uchar **merkle = NULL;
 	// uchar(*merkle_tree)[32] = { 0 };
 	int ntime;
-	char algo[64] = { 0 };
-	get_currentalgo(algo, sizeof(algo));
-	bool has_claim = !strcasecmp(algo, "lbry");
 
 	if (sctx->is_equihash) {
 		return equi_stratum_notify(sctx, params);
@@ -1644,13 +1641,7 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 
 	job_id = json_string_value(json_array_get(params, p++));
 	prevhash = json_string_value(json_array_get(params, p++));
-	if (has_claim) {
-		claim = json_string_value(json_array_get(params, p++));
-		if (!claim || strlen(claim) != 64) {
-			applog(LOG_ERR, "Stratum notify: invalid claim parameter");
-			goto out;
-		}
-	}
+
 	coinb1 = json_string_value(json_array_get(params, p++));
 	coinb2 = json_string_value(json_array_get(params, p++));
 	merkle_arr = json_array_get(params, p++);
@@ -1713,7 +1704,6 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	free(sctx->job.job_id);
 	sctx->job.job_id = strdup(job_id);
 	hex2bin(sctx->job.prevhash, prevhash, 32);
-	if (has_claim) hex2bin(sctx->job.claim, claim, 32);
 
 	sctx->job.height = getblocheight(sctx);
 
