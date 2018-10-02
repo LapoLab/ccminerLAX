@@ -42,6 +42,8 @@ int lyra2Zz_submit(CURL *curl, struct pool_infos *pools, struct work *work);
    and performs basic validation of getblocktemplate request */
 int lyra2Zz_gbt_work_decode(CURL *curl, const json_t* val, struct work *work);
 
+int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params);
+
 void lyra2Zz_assign_thread_nonce_range(int thr_id, struct work *work, uint32_t *min_nonce, uint32_t *max_nonce);
 
 void lyra2Zz_make_header(

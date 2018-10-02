@@ -38,6 +38,9 @@
 
 #include "crypto/xmr-rpc.h"
 
+#include "lyra2/Lyra2Zz.h"
+#include "algos.h"
+
 extern pthread_mutex_t stratum_sock_lock;
 extern pthread_mutex_t stratum_work_lock;
 extern bool opt_debug_diff;
@@ -1527,6 +1530,10 @@ static bool stratum_notify(struct stratum_ctx *sctx, json_t *params)
 
 	if (sctx->is_equihash) {
 		return equi_stratum_notify(sctx, params);
+	}
+
+	if (opt_algo == ALGO_LYRA2ZZ) {
+		return lyra2Zz_stratum_notify(sctx, params);
 	}
 
 	job_id = json_string_value(json_array_get(params, p++));

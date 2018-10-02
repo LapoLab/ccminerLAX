@@ -1619,6 +1619,130 @@ int lyra2Zz_gbt_work_decode(CURL *curl, const json_t *val, struct work *work)
 	return true;
 }
 
+int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
+{
+	const char *job_id, *prevhash, *coinb1, *coinb2, *version, *nbits, *stime;
+	const char *claim = NULL, *nreward = NULL, *accumcheckpoint = NULL; /* accumcheckpoint is lyra2zz */
+	size_t coinb1_size, coinb2_size;
+	bool clean, ret = false;
+	int merkle_count, i, p=0;
+	json_t *merkle_arr;
+	uchar **merkle = NULL;
+	// uchar(*merkle_tree)[32] = { 0 };
+	int ntime;
+	char algo[64] = { 0 };
+	get_currentalgo(algo, sizeof(algo));
+	bool has_claim = !strcasecmp(algo, "lbry");
+
+	if (sctx->is_equihash) {
+		return equi_stratum_notify(sctx, params);
+	}
+
+	if (opt_algo == ALGO_LYRA2ZZ) {
+		return lyra2Zz_stratum_notify(sctx, params);
+	}
+
+	job_id = json_string_value(json_array_get(params, p++));
+	prevhash = json_string_value(json_array_get(params, p++));
+	if (has_claim) {
+		claim = json_string_value(json_array_get(params, p++));
+		if (!claim || strlen(claim) != 64) {
+			applog(LOG_ERR, "Stratum notify: invalid claim parameter");
+			goto out;
+		}
+	}
+	coinb1 = json_string_value(json_array_get(params, p++));
+	coinb2 = json_string_value(json_array_get(params, p++));
+	merkle_arr = json_array_get(params, p++);
+	if (!merkle_arr || !json_is_array(merkle_arr))
+		goto out;
+	merkle_count = (int) json_array_size(merkle_arr);
+	version = json_string_value(json_array_get(params, p++));
+	nbits = json_string_value(json_array_get(params, p++));
+	stime = json_string_value(json_array_get(params, p++));
+	clean = json_is_true(json_array_get(params, p)); p++;
+	nreward = json_string_value(json_array_get(params, p++));
+
+	if (!job_id || !prevhash || !coinb1 || !coinb2 || !version || !nbits || !stime ||
+	    strlen(prevhash) != 64 || strlen(version) != 8 ||
+	    strlen(nbits) != 8 || strlen(stime) != 8) {
+		applog(LOG_ERR, "Stratum notify: invalid parameters");
+		goto out;
+	}
+
+	/* store stratum server time diff */
+	hex2bin((uchar *)&ntime, stime, 4);
+	ntime = swab32(ntime) - (uint32_t) time(0);
+	if (ntime > sctx->srvtime_diff) {
+		sctx->srvtime_diff = ntime;
+		if (opt_protocol && ntime > 20)
+			applog(LOG_DEBUG, "stratum time is at least %ds in the future", ntime);
+	}
+
+	if (merkle_count)
+		merkle = (uchar**) malloc(merkle_count * sizeof(char *));
+	for (i = 0; i < merkle_count; i++) {
+		const char *s = json_string_value(json_array_get(merkle_arr, i));
+		if (!s || strlen(s) != 64) {
+			while (i--)
+				free(merkle[i]);
+			free(merkle);
+			applog(LOG_ERR, "Stratum notify: invalid Merkle branch");
+			goto out;
+		}
+		merkle[i] = (uchar*) malloc(32);
+		hex2bin(merkle[i], s, 32);
+	}
+
+	pthread_mutex_lock(&stratum_work_lock);
+
+	coinb1_size = strlen(coinb1) / 2;
+	coinb2_size = strlen(coinb2) / 2;
+	sctx->job.coinbase_size = coinb1_size + sctx->xnonce1_size +
+	                          sctx->xnonce2_size + coinb2_size;
+
+	sctx->job.coinbase = (uchar*) realloc(sctx->job.coinbase, sctx->job.coinbase_size);
+	sctx->job.xnonce2 = sctx->job.coinbase + coinb1_size + sctx->xnonce1_size;
+	hex2bin(sctx->job.coinbase, coinb1, coinb1_size);
+	memcpy(sctx->job.coinbase + coinb1_size, sctx->xnonce1, sctx->xnonce1_size);
+
+	if (!sctx->job.job_id || strcmp(sctx->job.job_id, job_id))
+		memset(sctx->job.xnonce2, 0, sctx->xnonce2_size);
+	hex2bin(sctx->job.xnonce2 + sctx->xnonce2_size, coinb2, coinb2_size);
+
+	free(sctx->job.job_id);
+	sctx->job.job_id = strdup(job_id);
+	hex2bin(sctx->job.prevhash, prevhash, 32);
+	if (has_claim) hex2bin(sctx->job.claim, claim, 32);
+
+	sctx->job.height = getblocheight(sctx);
+
+	for (i = 0; i < sctx->job.merkle_count; i++)
+		free(sctx->job.merkle[i]);
+	free(sctx->job.merkle);
+	sctx->job.merkle = merkle;
+	sctx->job.merkle_count = merkle_count;
+
+	hex2bin(sctx->job.version, version, 4);
+	hex2bin(sctx->job.nbits, nbits, 4);
+	hex2bin(sctx->job.ntime, stime, 4);
+	if(nreward != NULL)
+	{
+		if(strlen(nreward) == 4)
+			hex2bin(sctx->job.nreward, nreward, 2);
+	}
+	sctx->job.clean = clean;
+
+	sctx->job.diff = sctx->next_diff;
+
+	pthread_mutex_unlock(&stratum_work_lock);
+
+	ret = true;
+
+out:
+	return ret;
+}
+
 void lyra2Zz_assign_thread_nonce_range(int thr_id, struct work *work, uint32_t *min_nonce, uint32_t *max_nonce)
 {
 	register uint32_t t_id = thr_id & MAX_GPUS_MASK;
