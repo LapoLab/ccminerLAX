@@ -420,7 +420,9 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 	const uint32_t first_nonce = pdata[19];
 	int dev_id = device_map[thr_id];
 
-	if (!opt_benchmark) {
+	bool do_stalequery = !opt_benchmark && !have_stratum;
+
+	if (do_stalequery) {
 		if (!g_staleblock_query[thr_id].get()) {
 			g_staleblock_query[thr_id].reset(new l2zz_staleblock_query());
 			g_staleblock_query[thr_id]->init(thr_id);
@@ -452,7 +454,7 @@ extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonc
 		debug_interval_start = _time64(NULL);
 
 	do {
-		if (!opt_benchmark) {
+		if (do_stalequery) {
 			if (g_staleblock_query[thr_id]->stale_block_check(thr_id, work)) {
 				restart_thread(thr_id);
 				break;
