@@ -207,6 +207,7 @@ static std::vector<target_hash> g_targethash;
 static bool init[MAX_GPUS] = { 0 };
 static __thread uint32_t throughput = 0;
 static __thread bool gtx750ti = false;
+static __thread bool shader_model_logged = false;
 
 static int maybe_init_thread_data(int thr_id, int dev_id, uint32_t max_nonce, uint32_t first_nonce)
 {
@@ -288,7 +289,10 @@ static void maybe_report_bad_nonce(int thr_id, uint32_t target, uint32_t vhash, 
 
 static inline void log_shadermodel(int thr_id)
 {
-	gpulog(LOG_BLUE, thr_id, "Device shader model: %i", device_sm[thr_id % MAX_GPUS]);
+	if (!shader_model_logged) {
+		gpulog(LOG_BLUE, thr_id, "Device shader model: %i", device_sm[thr_id % MAX_GPUS]);
+		shader_model_logged = true;
+	}
 }
 
 /* Testing */
