@@ -1768,7 +1768,12 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	sctx->job.merkle = merkle;
 	sctx->job.merkle_count = merkle_count;
 
-	hex2bin(sctx->job.version, version, 4);
+	{
+		uint32_t tmp_version;
+		hex2bin(&tmp_version, version, 4);
+		be32enc(&sctx->job.version, tmp_version);
+	}
+	
 	hex2bin(sctx->job.nbits, nbits, 4);
 	hex2bin(sctx->job.ntime, stime, 4);
 
