@@ -1924,6 +1924,14 @@ static bool gpu_hash_test_check(int thr_id)
 	return true;
 }
 
+#define miner_thread_log_hashrate do {																	\
+	if (!opt_quiet && loopcnt > 1 && (time(NULL) - tm_rate_log) > opt_maxlograte) {						\
+		format_hashrate(thr_hashrates[thr_id], s);														\
+		gpulog(LOG_INFO, thr_id, "%s, %s", device_name[dev_id], s);										\
+		tm_rate_log = time(NULL);																		\
+	}																									\
+} while (0)
+
 static void *miner_thread(void *userdata)
 {
 	struct thr_info *mythr = (struct thr_info *)userdata;
@@ -2695,8 +2703,11 @@ static void *miner_thread(void *userdata)
 		if (abort_flag)
 			break; // time to leave the mining loop...
 
-		if (work_restart[thr_id].restart)
+		
+		if (work_restart[thr_id].restart) {
+			miner_thread_log_hashrate;
 			continue;
+		}
 
 		/* record scanhash elapsed time */
 		gettimeofday(&tv_end, NULL);
@@ -2772,12 +2783,7 @@ static void *miner_thread(void *userdata)
 		if (opt_debug && check_dups && opt_algo != ALGO_DECRED && opt_algo != ALGO_EQUIHASH && opt_algo != ALGO_SIA)
 			hashlog_remember_scan_range(&work);
 
-		/* output */
-		if (!opt_quiet && loopcnt > 1 && (time(NULL) - tm_rate_log) > opt_maxlograte) {
-			format_hashrate(thr_hashrates[thr_id], s);
-			gpulog(LOG_INFO, thr_id, "%s, %s", device_name[dev_id], s);
-			tm_rate_log = time(NULL);
-		}
+		miner_thread_log_hashrate;
 
 		/* ignore first loop hashrate */
 		if (firstwork_time && thr_id == (opt_n_threads - 1)) {
@@ -2850,6 +2856,8 @@ out:
 	tq_freeze(mythr->q);
 	return NULL;
 }
+
+#undef miner_thread_log_hashrate
 
 static void *longpoll_thread(void *userdata)
 {
