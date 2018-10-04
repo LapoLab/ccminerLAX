@@ -16,12 +16,12 @@
 extern "C" {
 #endif
 
-typedef uint32_t uint256_32_t[8];
+typedef uint32_t l2zz_uint256_32_t[8];
 typedef uint32_t lyra2zz_header_data_t[LYRA2ZZ_BLOCK_HEADER_UINT32_LEN];
 
 typedef struct lyra2zz_block_header {
-	uint256_32_t block_hash;
-	uint256_32_t target_decoded;
+	l2zz_uint256_32_t block_hash;
+	l2zz_uint256_32_t target_decoded;
 	
 	uint8_t *byte_view; /* points to data (used for debugging) */
 	

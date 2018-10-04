@@ -506,16 +506,16 @@ struct l2zz_transaction {
 
 typedef struct l2zz_header_helper {
 	int32_t version;
-	uint256_32_t prev_block;
-	uint256_32_t merkle_root;
+	l2zz_uint256_32_t prev_block;
+	l2zz_uint256_32_t merkle_root;
 	uint32_t time;
 	uint32_t bits;
 	uint32_t nonce;
-	uint256_32_t accum_checkpoint;
+	l2zz_uint256_32_t accum_checkpoint;
 
 } l2zz_header_helper_t;
 
-static void make_u256(uint256_32_t in, uint256& out)
+static void make_u256(l2zz_uint256_32_t in, uint256& out)
 {
 	std::vector<unsigned char> tmp(32);
 	memcpy(&tmp[0], &in[0], 32);
@@ -545,7 +545,7 @@ static std::string get_hex_bytes(uint32_t x)
 	return ret;
 }
 
-static std::string get_hex_bytes(uint256_32_t x)
+static std::string get_hex_bytes(l2zz_uint256_32_t x)
 {
 	std::stringstream ss;
 
@@ -670,7 +670,7 @@ public:
 		for (size_t i = 0; i < in_count; ++i) {
 			l2zz_in in;
 			
-			uint256_32_t hash;
+			l2zz_uint256_32_t hash;
 			memcpy(&hash[0], p, sizeof(hash));
 			p += sizeof(hash);
 
@@ -1820,15 +1820,15 @@ int lyra2Zz_benchmark_set_params(int thr_id, struct work *work)
 
 	l2zz_header_helper_t *p_header = (l2zz_header_helper_t *) work->data;
 
-	if (!CryptGenRandom(hCryptProv, sizeof(uint256_32_t), (BYTE *)&p_header->accum_checkpoint[0])) {
+	if (!CryptGenRandom(hCryptProv, sizeof(l2zz_uint256_32_t), (BYTE *)&p_header->accum_checkpoint[0])) {
 		goto bad_gen_random;	
 	}
 
-	if (!CryptGenRandom(hCryptProv, sizeof(uint256_32_t), (BYTE *)&p_header->merkle_root[0])) {
+	if (!CryptGenRandom(hCryptProv, sizeof(l2zz_uint256_32_t), (BYTE *)&p_header->merkle_root[0])) {
 		goto bad_gen_random;	
 	}
 
-	if (!CryptGenRandom(hCryptProv, sizeof(uint256_32_t), (BYTE *)&p_header->prev_block[0])) {
+	if (!CryptGenRandom(hCryptProv, sizeof(l2zz_uint256_32_t), (BYTE *)&p_header->prev_block[0])) {
 		goto bad_gen_random;	
 	}
 
