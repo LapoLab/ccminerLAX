@@ -1726,6 +1726,15 @@ static bool stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 			work->data[20 + i] = be32dec((uint32_t *)sctx->job.accumulatorcheckpoint + i);
 		work->data[28] = 0x80000000;
 		work->data[31] = 0x00000280;
+
+		/*
+			this ensures that end_nonce is properly set in miner_thread; 
+			the nonce range is explicitly set according to the amount of GPU threads, 
+			but we need a base for them. This data isn't necessarily permanant and it obviously is static. 
+			For now, getblocktemplate returns [0, UINT32_MAX] range, so we'll duplicate here and adjust as necessary.
+		*/
+		work->noncerange.u32[0] = 0;
+		work->noncerange.u32[1] = UINT32_MAX;
 	} else {
 		for (i = 0; i < 8; i++)
 			work->data[9 + i] = be32dec((uint32_t *)merkle_root + i);
