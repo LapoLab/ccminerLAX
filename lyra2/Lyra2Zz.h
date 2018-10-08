@@ -73,6 +73,10 @@ void lyra2Zz_make_header(
 
 int lyra2Zz_benchmark_set_params(int thr_id, struct work *work);
 
+void lyra2Zz_log_work_header(struct work * w);
+
+void lyra2Zz_log_stratum_job(struct stratum_ctx *sctx);
+
 extern int lyra2Zz_test_hash(int thr_id);
 
 #ifdef __cplusplus

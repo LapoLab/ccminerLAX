@@ -683,7 +683,14 @@ extern void gpulog(int prio, int thr_id, const char *fmt, ...);
 #define applog_fn(prio, msg_literal) applog((prio), "[%s] " msg_literal, __FUNCTION__)
 #define applogf_fn(prio, fmt_literal, ...) applog((prio), "[%s] " fmt_literal, __FUNCTION__, __VA_ARGS__)
 #define applogf_debug_fn(fmt_literal, ...) if (opt_debug) { applogf_fn(LOG_DEBUG, fmt_literal, __VA_ARGS__); }
+
 #define gpulogf_fn(prio, thr_id, fmt_literal, ...) gpulog((prio), (thr_id), "[" __FUNCTION__ "]" fmt_literal, __VA_ARGS__)
+
+#define APPLOG_FMT_UINT32_X_8 "0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x"
+#define APPLOG_ARG_UINT32_X_8(u32) *((u32) + 0), *((u32) + 1), *((u32) + 2), *((u32) + 3), *((u32) + 4), *((u32) + 5), *((u32) + 6), *((u32) + 7)
+
+#define APPLOG_FMT_UINT8_X_32 APPLOG_FMT_UINT32_X_8 " " APPLOG_FMT_UINT32_X_8 " " APPLOG_FMT_UINT32_X_8 " " APPLOG_FMT_UINT32_X_8
+#define APPLOG_ARG_UINT8_X_32(u8) APPLOG_ARG_UINT32_X_8((u8)), APPLOG_ARG_UINT32_X_8((u8) + 8), APPLOG_ARG_UINT32_X_8((u8) + 16), APPLOG_ARG_UINT32_X_8((u8) + 24) 
 
 #define applog_debug_json(j) do {														\
 	if (opt_debug) {																	\

@@ -1361,14 +1361,14 @@ void lyra2Zz_make_header(
 	ret->min_nonce = (uint32_t)(noncerange & 0xFFFFFFFF);
 	ret->max_nonce = (uint32_t)(noncerange >> 32);
 
-	ret->data[0] = version;
-	ret->data[17] = time;
-	ret->data[18] = bits;
-	ret->data[19] = ret->min_nonce;
+	ret->data[LYRA2ZZ_HEADER_UINT32_OFFSET_VERSION] = version;
+	ret->data[LYRA2ZZ_HEADER_UINT32_OFFSET_TIME] = time;
+	ret->data[LYRA2ZZ_HEADER_UINT32_OFFSET_TARGET_ENCODED] = bits;
+	ret->data[LYRA2ZZ_HEADER_UINT32_OFFSET_NONCE] = ret->min_nonce;
 
-	memcpy(&ret->data[1], prev_block.begin(), prev_block.size());
-	memcpy(&ret->data[9], merkle_root.begin(), merkle_root.size());
-	memcpy(&ret->data[20], accum_checkpoint.begin(), accum_checkpoint.size());
+	memcpy(&ret->data[LYRA2ZZ_HEADER_UINT32_OFFSET_PREV_BLOCK], prev_block.begin(), prev_block.size());
+	memcpy(&ret->data[LYRA2ZZ_HEADER_UINT32_OFFSET_MERKLE_ROOT], merkle_root.begin(), merkle_root.size());
+	memcpy(&ret->data[LYRA2ZZ_HEADER_UINT32_OFFSET_ACCUM_CHECKPOINT], accum_checkpoint.begin(), accum_checkpoint.size());
 
 	ret->data[28] = 0x80000000;
 	ret->data[31] = 0x00000280;
@@ -1875,4 +1875,66 @@ bad_gen_random:
 
 	return false;
 #endif
+}
+
+void lyra2Zz_log_work_header(struct work *w)
+{
+	applogf_debug_fn(
+		"\nWORK DUMP:\n"
+		"\tversion: 0x%x\n"
+		"\tprev_block: " APPLOG_FMT_UINT32_X_8 "\n"
+		"\tmerkle_root: " APPLOG_FMT_UINT32_X_8 "\n"
+		"\ttime: 0x%x\n"
+		"\ttarget_encoded: 0x%x\n"
+		"\tnonce: 0x%x\n"
+		"\taccumulator_checkpoint: " APPLOG_FMT_UINT32_X_8 "\n",
+		w->data[LYRA2ZZ_HEADER_UINT32_OFFSET_VERSION],
+		
+		APPLOG_ARG_UINT32_X_8(w->data + LYRA2ZZ_HEADER_UINT32_OFFSET_PREV_BLOCK),
+		APPLOG_ARG_UINT32_X_8(w->data + LYRA2ZZ_HEADER_UINT32_OFFSET_MERKLE_ROOT),
+		
+		w->data[LYRA2ZZ_HEADER_UINT32_OFFSET_TIME],
+		w->data[LYRA2ZZ_HEADER_UINT32_OFFSET_TARGET_ENCODED],
+		w->data[LYRA2ZZ_HEADER_UINT32_OFFSET_NONCE],
+
+		APPLOG_ARG_UINT32_X_8(w->data + LYRA2ZZ_HEADER_UINT32_OFFSET_ACCUM_CHECKPOINT)
+	)
+}
+
+void lyra2Zz_log_stratum_job(struct stratum_ctx *sctx)
+{
+	applogf_debug_fn(
+		"\nSTRATUM DUMP:\n"
+		"\tjob_id: %s\n"
+		"\tprev_block: " APPLOG_FMT_UINT8_X_32 "\n"
+		"\tcoinbase_size: 0x%x\n"
+		"\tmerkle_count: 0x%x\n"
+		"\taccumulator_checkpoint: " APPLOG_FMT_UINT8_X_32 "\n"
+		"\tversion: 0x%x\n"
+		"\tnbits: 0x%x\n"
+		"\tntime: 0x%x\n"
+		"\tclean: 0x%x\n"
+		"\tnreward[0]: 0x%x\n"
+		"\tnreward[1]: 0x%x\n"
+		"\theight: 0x%x\n"
+		"\tshares_count: 0x%x\n",
+		sctx->job.job_id,
+		
+		APPLOG_ARG_UINT8_X_32(sctx->job.prevhash),
+		CONV_SIZE_T_TO_U32(sctx->job.coinbase_size),
+		
+		sctx->job.merkle_count,
+		
+		APPLOG_ARG_UINT8_X_32(sctx->job.accumulatorcheckpoint),
+		
+		le32dec(sctx->job.version),
+		le32dec(sctx->job.nbits),
+		le32dec(sctx->job.ntime),
+
+		sctx->job.clean,
+		sctx->job.nreward[0],
+		sctx->job.nreward[1],
+		sctx->job.height,
+		sctx->job.shares_count
+	);
 }
