@@ -1028,6 +1028,10 @@ static bool submit_upstream_work(CURL *curl, struct work *work)
 			be32enc(&ntime, work->data[17]);
 			be32enc(&nonce, work->data[19]);
 			break;
+		case ALGO_LYRA2ZZ:
+			be32enc(&ntime, work->data[17]);
+			be32enc(&nonce, work->data[19]);
+			break;
 		default:
 			le32enc(&ntime, work->data[17]);
 			le32enc(&nonce, work->data[19]);
@@ -1718,21 +1722,24 @@ static bool stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 		work->data[20] = 0x80000000;
 		if (opt_debug) applog_hex(work->data, 80);
 	} else if (opt_algo == ALGO_LYRA2ZZ){ // newly added experimental LAPO support (4/26/2018)
+#if 0
 		for (i = 0; i < 8; i++)
 			work->data[9 + i] = be32dec((uint32_t *)merkle_root + i);
 		work->data[17] = le32dec(sctx->job.ntime);
 		work->data[18] = le32dec(sctx->job.nbits);
 		for (i = 0; i < 8; i++)
 			work->data[20 + i] = be32dec((uint32_t *)sctx->job.accumulatorcheckpoint + i);
+#endif
+
+		work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_TIME] = le32dec(sctx->job.ntime);
+		work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_TARGET_ENCODED] = le32dec(sctx->job.nbits);
+
+		memcpy(&work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_MERKLE_ROOT], merkle_root, LYRA2ZZ_SIZE_MERKLE_ROOT);
+		memcpy(&work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_ACCUM_CHECKPOINT], sctx->job.accumulatorcheckpoint, LYRA2ZZ_SIZE_ACCUM_CHECKPOINT);
+
 		work->data[28] = 0x80000000;
 		work->data[31] = 0x00000280;
 
-		/*
-			this ensures that end_nonce is properly set in miner_thread; 
-			the nonce range is explicitly set according to the amount of GPU threads, 
-			but we need a base for them. This data isn't necessarily permanant and it obviously is static. 
-			For now, getblocktemplate returns [0, UINT32_MAX] range, so we'll duplicate here and adjust as necessary.
-		*/
 		work->noncerange.u32[0] = 0;
 		work->noncerange.u32[1] = UINT32_MAX;
 	} else {
