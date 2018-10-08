@@ -80,6 +80,7 @@ public:
     }
 
     explicit base_uint(const std::string& str);
+	explicit base_uint(const char *str);
     explicit base_uint(const std::vector<unsigned char>& vch);
 
     bool operator!() const
@@ -342,6 +343,7 @@ public:
     uint256(const base_uint<256>& b) : base_uint<256>(b) {}
     uint256(uint64_t b) : base_uint<256>(b) {}
     explicit uint256(const std::string& str) : base_uint<256>(str) {}
+	explicit uint256(const char *str) : base_uint<256>(str) {}
     explicit uint256(const std::vector<unsigned char>& vch) : base_uint<256>(vch) {}
 
     /**

@@ -1758,7 +1758,7 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 
 	free(sctx->job.job_id);
 	sctx->job.job_id = strdup(job_id);
-	hex2bin(sctx->job.prevhash, prevhash, 32);
+	hex2bin(sctx->job.prevhash, prevhash, LYRA2ZZ_SIZE_PREV_BLOCK);
 
 	sctx->job.height = l2zz_getblock_height(sctx);
 
@@ -1773,15 +1773,33 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 		hex2bin(&tmp_version, version, 4);
 		be32enc(&sctx->job.version, tmp_version);
 	}
-	
+
+#if 1
+	{
+		uint32_t tmp_ntime;
+		hex2bin(&tmp_ntime, stime, 4);
+		be32enc(&sctx->job.ntime, tmp_ntime);
+	}
+
+	{
+		uint32_t tmp_nbits;
+		hex2bin(&tmp_nbits, nbits, 4);
+		be32enc(&sctx->job.nbits, tmp_nbits);
+	}
+#else
 	hex2bin(sctx->job.nbits, nbits, 4);
 	hex2bin(sctx->job.ntime, stime, 4);
-
+#endif
 	sctx->job.clean = clean;
 
 	sctx->job.diff = sctx->next_diff;
 	
-	hex2bin(sctx->job.accumulatorcheckpoint, accumcheckpoint, 32);
+	{
+		uint256 tmp{accumcheckpoint};
+		memcpy(sctx->job.accumulatorcheckpoint, tmp.begin(), tmp.size());
+	}
+
+//	hex2bin(sctx->job.accumulatorcheckpoint, accumcheckpoint, 32);
 
 	pthread_mutex_unlock(&stratum_work_lock);
 

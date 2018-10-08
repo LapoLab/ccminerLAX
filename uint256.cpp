@@ -45,6 +45,12 @@ base_uint<BITS>::base_uint(const std::string& str)
 }
 
 template <unsigned int BITS>
+base_uint<BITS>::base_uint(const char *str)
+{
+	SetHex(str);
+}
+
+template <unsigned int BITS>
 base_uint<BITS>::base_uint(const std::vector<unsigned char>& vch)
 {
     if (vch.size() != sizeof(pn))
@@ -271,6 +277,7 @@ template unsigned int base_uint<160>::bits() const;
 
 // Explicit instantiations for base_uint<256>
 template base_uint<256>::base_uint(const std::string&);
+template base_uint<256>::base_uint(const char *str);
 template base_uint<256>::base_uint(const std::vector<unsigned char>&);
 template base_uint<256>& base_uint<256>::operator<<=(unsigned int);
 template base_uint<256>& base_uint<256>::operator>>=(unsigned int);
