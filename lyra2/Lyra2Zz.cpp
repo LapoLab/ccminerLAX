@@ -1774,13 +1774,17 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 		be32enc(&sctx->job.version, tmp_version);
 	}
 
-#if 1
+#if 0
 	{
 		uint32_t tmp_ntime;
 		hex2bin(&tmp_ntime, stime, 4);
 		be32enc(&sctx->job.ntime, tmp_ntime);
 	}
+#else
+		hex2bin(sctx->job.ntime, stime, 4);
+#endif
 
+#if 1
 	{
 		uint32_t tmp_nbits;
 		hex2bin(&tmp_nbits, nbits, 4);
@@ -1788,18 +1792,19 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	}
 #else
 	hex2bin(sctx->job.nbits, nbits, 4);
-	hex2bin(sctx->job.ntime, stime, 4);
 #endif
-	sctx->job.clean = clean;
 
+	sctx->job.clean = clean;
 	sctx->job.diff = sctx->next_diff;
-	
+
+#if 0
 	{
 		uint256 tmp{accumcheckpoint};
 		memcpy(sctx->job.accumulatorcheckpoint, tmp.begin(), tmp.size());
 	}
-
-//	hex2bin(sctx->job.accumulatorcheckpoint, accumcheckpoint, 32);
+#else
+	hex2bin(sctx->job.accumulatorcheckpoint, accumcheckpoint, 32);
+#endif
 
 	pthread_mutex_unlock(&stratum_work_lock);
 

@@ -1029,13 +1029,16 @@ static bool submit_upstream_work(CURL *curl, struct work *work)
 			be32enc(&nonce, work->data[19]);
 			break;
 		case ALGO_LYRA2ZZ:
-			be32enc(&ntime, work->data[17]);
-			be32enc(&nonce, work->data[19]);
+			lyra2Zz_log_work_header(work);
+			le32enc(&ntime, work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_TIME]);
+			be32enc(&nonce, work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_NONCE]);
 			break;
 		default:
 			le32enc(&ntime, work->data[17]);
 			le32enc(&nonce, work->data[19]);
 		}
+
+
 		noncestr = bin2hex((const uchar*)(&nonce), 4);
 
 		if (check_dups)
