@@ -1085,6 +1085,9 @@ static bool submit_upstream_work(CURL *curl, struct work *work)
 					"\"%s\", \"%s\", \"%s\", \"%s\", \"%s\"], \"id\":%u}",
 					pool->user, work->job_id + 8, xnonce2str, ntimestr, noncestr, stratum.job.shares_count + 10);
 		}
+
+		applogf_debug_fn("submission string: %s", s);
+
 		free(xnonce2str);
 		free(ntimestr);
 		free(noncestr);
@@ -2088,6 +2091,12 @@ static void *miner_thread(void *userdata)
 					g_work_time = time(NULL);
 				if (opt_algo == ALGO_CRYPTONIGHT || opt_algo == ALGO_CRYPTOLIGHT)
 					nonceptr[0] += 0x100000;
+
+
+				if (opt_algo == ALGO_LYRA2ZZ) {
+					lyra2Zz_log_stratum_job(&stratum);
+					//lyra2Zz_log_work_header(&g_work);
+				}
 			}
 		} else {
 			uint32_t secs = 0;
