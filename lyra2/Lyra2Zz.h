@@ -46,9 +46,21 @@ typedef struct lyra2zz_block_header {
 
 } lyra2zz_block_header_t;
 
+typedef struct lyra2zz_header_helper {
+	int32_t version;
+	l2zz_uint256_32_t prev_block;
+	l2zz_uint256_32_t merkle_root;
+	uint32_t time;
+	uint32_t bits;
+	uint32_t nonce;
+	l2zz_uint256_32_t accum_checkpoint;
+
+} lyra2zz_header_helper_t;
 
 class uint256;
 struct json_t;
+
+int lyra2Zz_get_header_stream(char ** str_out, struct work *work, const uint256 &target);
 
 int lyra2Zz_submit(CURL *curl, struct pool_infos *pools, struct work *work);
 

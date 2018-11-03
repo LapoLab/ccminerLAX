@@ -504,17 +504,6 @@ struct l2zz_transaction {
 	}
 };
 
-typedef struct l2zz_header_helper {
-	int32_t version;
-	l2zz_uint256_32_t prev_block;
-	l2zz_uint256_32_t merkle_root;
-	uint32_t time;
-	uint32_t bits;
-	uint32_t nonce;
-	l2zz_uint256_32_t accum_checkpoint;
-
-} l2zz_header_helper_t;
-
 static void make_u256(l2zz_uint256_32_t in, uint256& out)
 {
 	std::vector<unsigned char> tmp(32);
@@ -1425,18 +1414,22 @@ static bool write_transactions_encoded(struct work *work, std::stringstream& hex
 	return true;
 }
 
-/* I know, this is ghetto... */
-#define l2zz_submit_fin(r)																		\
-	do {																						\
-		return r;																				\
-	} while (0)
-		
-int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
+int lyra2Zz_get_header_stream(char **str_out, struct work *work, const uint256 &target)
 {
-	/* serialize the header data */
+    if (!str_out) {
+        applogf_fn(LOG_ERR, "NULL ptr received!");
+        return false;
+    }
+
+    if (*str_out) {
+        free(*str_out);
+        *str_out = nullptr;
+    }
+
+    /* serialize the header data */
 	uint32_t *pdata = work->data;
 
-	l2zz_header_helper_t *header = (l2zz_header_helper_t *)(pdata);
+	lyra2zz_header_helper_t *header = (lyra2zz_header_helper_t *)(pdata);
 
 	uint256 prev, merkle, accum;
 
@@ -1444,7 +1437,6 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 	make_u256(header->merkle_root, merkle);
 	make_u256(header->accum_checkpoint, accum);
 
-	uint256 target = uint256().SetCompact(header->bits);
 	std::string strtarget = target.GetHex();
 
 	std::stringstream hex_data_stream;
@@ -1470,21 +1462,52 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 	/* transactions */
 
 	if (!write_transactions_encoded(work, hex_data_stream)) {
-		l2zz_submit_fin(false);
+       return false;
 	}
 
 	hex_data_stream << "00"; // signature size
 
-	/* build JSON-RPC request */
+	std::string tmp = hex_data_stream.str();
 
-	std::string hex_data = hex_data_stream.str();
+   maybe_try_bzalloc_or_retfalse(*str_out, char, tmp.size() + 1);
 
-	std::vector<char> s(4096 + hex_data.size());
+   strncpy(*str_out, tmp.data(), tmp.size());
+
+   return true;
+}
+
+/* I know, this is ghetto... */
+#define l2zz_submit_fin(r)																		  \
+	do {                                                                         \
+        if (hex_data) {                                                         \
+            free(hex_data);                                                     \
+        }                                                                       \
+		return (r);																				     \
+	} while (0)
+		
+int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
+{
+    uint32_t *pdata = work->data;
+
+   lyra2zz_header_helper_t *header = (lyra2zz_header_helper_t *)(pdata);
+   uint256 target = uint256().SetCompact(header->bits);
+
+	char * hex_data = nullptr;
+
+   if (!lyra2Zz_get_header_stream(&hex_data, work, target)) {
+       applogf_fn(LOG_ERR, "%s", "could not serialize block header!");
+       l2zz_submit_fin(false);
+   }
+
+   size_t hex_data_len = strlen(hex_data);
+
+	std::vector<char> s(4096 + hex_data_len);
 	memset(&s[0], 0, s.size());
 
 	sprintf(&s[0],
 		"{\"method\": \"submitblock\", \"params\": [\"%s\"], \"id\":10}\r\n",
-		hex_data.c_str());
+		hex_data);
+   
 
 	// make u256 block hash for client side tests
 	uint32_t out[8];		
@@ -1494,7 +1517,7 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 	make_u256(&out[0], block_hash);
 
 	/* log submit info to console */
-	header = (l2zz_header_helper_t *)work->data;
+	header = (lyra2zz_header_helper_t *)work->data;
 	target = uint256().SetCompact(header->bits);
 
 	if (opt_debug) {
@@ -1506,7 +1529,7 @@ int lyra2Zz_submit(CURL* curl, struct pool_infos *pool, struct work *work)
 			"Block Hash: %s\n\n"
 			"Target: %s\n\n"
 			"Block Hex data: %s\n\n", 
-			hex_data.size(), 
+			hex_data_len, 
 			str_block_hash.c_str(),
 			str_target.c_str(),
 			s.data());
@@ -1789,6 +1812,7 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 		uint32_t tmp_nbits;
 		hex2bin(&tmp_nbits, nbits, 4);
 		be32enc(&sctx->job.nbits, tmp_nbits);
+	//	stratum_suggest_difficulty(sctx, le32dec(sctx->job.nbits));
 	}
 #else
 	hex2bin(sctx->job.nbits, nbits, 4);
@@ -1846,7 +1870,7 @@ int lyra2Zz_benchmark_set_params(int thr_id, struct work *work)
 		}
 	} 
 
-	l2zz_header_helper_t *p_header = (l2zz_header_helper_t *) work->data;
+	lyra2zz_header_helper_t *p_header = (lyra2zz_header_helper_t *) work->data;
 
 	if (!CryptGenRandom(hCryptProv, sizeof(l2zz_uint256_32_t), (BYTE *)&p_header->accum_checkpoint[0])) {
 		goto bad_gen_random;	
