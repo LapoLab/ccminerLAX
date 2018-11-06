@@ -1029,15 +1029,13 @@ static bool submit_upstream_work(CURL *curl, struct work *work)
 			be32enc(&nonce, work->data[19]);
 			break;
 		case ALGO_LYRA2ZZ:
-			lyra2Zz_log_work_header(work);
-			le32enc(&ntime, work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_TIME]);
-			be32enc(&nonce, work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_NONCE]);
+			be32enc(&ntime, work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_TIME]);
+			le32enc(&nonce, work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_NONCE]);
 			break;
 		default:
 			le32enc(&ntime, work->data[17]);
 			le32enc(&nonce, work->data[19]);
 		}
-
 
 		noncestr = bin2hex((const uchar*)(&nonce), 4);
 
@@ -1736,12 +1734,16 @@ static bool stratum_gen_work(struct stratum_ctx *sctx, struct work *work)
 		for (i = 0; i < 8; i++)
 			work->data[20 + i] = be32dec((uint32_t *)sctx->job.accumulatorcheckpoint + i);
 #endif
+		for (i = 0; i < 8; i++)
+			work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_PREV_BLOCK + i] = be32dec((uint32_t *)sctx->job.prevhash + i);
+
+		memcpy(&work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_MERKLE_ROOT], merkle_root, LYRA2ZZ_SIZE_MERKLE_ROOT);
 
 		work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_TIME] = le32dec(sctx->job.ntime);
 		work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_TARGET_ENCODED] = le32dec(sctx->job.nbits);
 
-		memcpy(&work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_MERKLE_ROOT], merkle_root, LYRA2ZZ_SIZE_MERKLE_ROOT);
-		memcpy(&work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_ACCUM_CHECKPOINT], sctx->job.accumulatorcheckpoint, LYRA2ZZ_SIZE_ACCUM_CHECKPOINT);
+		for (i = 0; i < 8; i++)
+			work->data[LYRA2ZZ_HEADER_UINT32_OFFSET_ACCUM_CHECKPOINT + i] = be32dec((uint32_t *)sctx->job.accumulatorcheckpoint + i);
 
 		work->data[28] = 0x80000000;
 		work->data[31] = 0x00000280;

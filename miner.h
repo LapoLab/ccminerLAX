@@ -705,6 +705,7 @@ extern void gpulog(int prio, int thr_id, const char *fmt, ...);
 } while (0)
 
 void get_defconfig_path(char *out, size_t bufsize, char *argv0);
+extern void chexrev2(char *out, const char *in);
 extern void chexrev(char *out);
 extern void cbin2hex(char *out, const char *in, size_t len);
 extern char *bin2hex(const unsigned char *in, size_t len);

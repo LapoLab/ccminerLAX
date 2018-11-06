@@ -759,6 +759,24 @@ void aligned_free(void *ptr)
 #endif
 }
 
+void chexrev2(char *out, const char *in)
+{
+	if (!out || !in)
+		return;
+
+	char * str_hex = out;
+	const char * str_in = in;
+
+	size_t len = strlen(in);
+
+	for (size_t i = 0; i < len; i += 2) {
+		size_t j = len - i - 1;
+		
+		str_hex[i + 1] = str_in[j + 0];
+		str_hex[i + 0] = str_in[j - 1];
+	}
+}
+
 void chexrev(char *out)
 {
 	if (!out)

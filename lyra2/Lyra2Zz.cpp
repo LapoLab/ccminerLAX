@@ -1790,45 +1790,34 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 	free(sctx->job.merkle);
 	sctx->job.merkle = merkle;
 	sctx->job.merkle_count = merkle_count;
-
+	
 	{
-		uint32_t tmp_version;
-		hex2bin(&tmp_version, version, 4);
-		be32enc(&sctx->job.version, tmp_version);
+		std::vector<char> tmp;
+		tmp.resize(8 + 4, 0);
+		chexrev2(tmp.data(), version);
+		hex2bin(sctx->job.version, tmp.data(), 4);
 	}
 
-#if 0
 	{
-		uint32_t tmp_ntime;
-		hex2bin(&tmp_ntime, stime, 4);
-		be32enc(&sctx->job.ntime, tmp_ntime);
+		std::vector<char> tmp;
+		tmp.resize(8 + 4, 0);
+		chexrev2(tmp.data(), stime);
+		hex2bin(sctx->job.ntime, tmp.data(), 4);
 	}
-#else
-		hex2bin(sctx->job.ntime, stime, 4);
-#endif
 
-#if 1
+//	hex2bin(sctx->job.ntime, stime, 4);
+
 	{
-		uint32_t tmp_nbits;
-		hex2bin(&tmp_nbits, nbits, 4);
-		be32enc(&sctx->job.nbits, tmp_nbits);
-	//	stratum_suggest_difficulty(sctx, le32dec(sctx->job.nbits));
+		std::vector<char> tmp;
+		tmp.resize(8 + 4, 0);
+		chexrev2(tmp.data(), nbits);
+		hex2bin(sctx->job.nbits, tmp.data(), 4);
 	}
-#else
-	hex2bin(sctx->job.nbits, nbits, 4);
-#endif
 
 	sctx->job.clean = clean;
 	sctx->job.diff = sctx->next_diff;
-
-#if 0
-	{
-		uint256 tmp{accumcheckpoint};
-		memcpy(sctx->job.accumulatorcheckpoint, tmp.begin(), tmp.size());
-	}
-#else
+	
 	hex2bin(sctx->job.accumulatorcheckpoint, accumcheckpoint, 32);
-#endif
 
 	pthread_mutex_unlock(&stratum_work_lock);
 
