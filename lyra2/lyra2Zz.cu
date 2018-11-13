@@ -414,6 +414,48 @@ ret_crypt_error:
 	return false;
 }
 
+static void maybe_log_stratum_hash(int thr_id, struct work *work, uint32_t *vhash, uint32_t *endiandata, uint32_t *ptarget)
+{
+    if (have_stratum && opt_debug) {
+        char vhashstr[72] = { 0 };
+        char vnoncestr[12] = { 0 }; 
+        char vtargetstr[72] = { 0 };         
+
+        cbin2hex(vhashstr, (const char *) vhash, 32);
+        cbin2hex(vnoncestr, (const char *)(&endiandata[19]), 4);
+        cbin2hex(vtargetstr, (const char *) ptarget, 32);
+                
+        char fname[32] = { 0 };
+
+        sprintf(fname, ".\\hashdump_%i.txt", thr_id);
+        FILE * f = fopen(fname, "ab+");
+
+        char *header_str = nullptr;
+
+        lyra2zz_header_helper_t *pheader = (lyra2zz_header_helper_t *) work->data;
+
+        if (lyra2Zz_get_header_stream(&header_str, work, uint256().SetCompact(pheader->bits))) {
+            if (f) {
+                fprintf(f, 
+                        "STRATUM HEADER: %s\nHASH(nonce = %s): %s\nTARGET: %s\n\n", 
+                        header_str, vnoncestr, vhashstr, vtargetstr);
+                fclose(f);
+            } else {
+                applogf_debug_fn("WARNING! Could not open %s\nSTRATUM HEADER: %s\nHASH(nonce = %s): %s\nTARGET: %s\n", 
+                                 fname, 
+                                 header_str, 
+                                 vnoncestr, 
+                                 vhashstr,
+                                 vtargetstr);
+            }
+
+            free(header_str);
+        }
+
+        sleep(3);
+    }
+}
+
 /* Public API */
 
 extern "C" int scanhash_lyra2Zz(int thr_id, struct work* work, uint32_t max_nonce, unsigned long *hashes_done)
