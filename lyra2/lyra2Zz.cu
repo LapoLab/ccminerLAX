@@ -79,6 +79,8 @@ class l2zz_staleblock_query
 public:
 	using l2zz_timer_t = l2zz_update_timer;
 
+	static const bool debug_log = false;
+
 	struct work * work_cmp;
 	char * str_work_data;
 	char * str_work_data_cmp;
@@ -102,9 +104,14 @@ public:
 		return str_work_data && str_work_data_cmp && work_cmp && timer.get();
 	}
 
+	bool do_log(void) const
+	{
+		!opt_quiet && opt_debug && debug_log;
+	}
+
 	bool init(int thr_id)
 	{
-		bool log = !valid() && !opt_quiet && opt_debug;
+		bool val = !valid();
 
 		if (!timer.get()) {
 			timer.reset(new l2zz_timer_t(thr_id));
@@ -114,8 +121,8 @@ public:
 		maybe_try_bzalloc_or_retfalse(str_work_data, char, L2ZZ_LOGSTR_SIZE);
 		maybe_try_bzalloc_or_retfalse(str_work_data_cmp, char, L2ZZ_LOGSTR_SIZE);
 
-		if (log) {
-			applog(LOG_DEBUG, LYRA2ZZ_LOG_HEADER "%s", "memory allocated");
+		if (do_log() && val) {
+			applogf_fn(LOG_DEBUG, "memory allocated");
 		}
 
 		return true;
@@ -128,16 +135,16 @@ public:
 		safe_free(str_work_data_cmp);
 
 		timer.reset();
-
-		applog(LOG_INFO, LYRA2ZZ_LOG_HEADER "%s","freed memory");
+		
+		if (do_log()) {
+			applogf_fn(LOG_DEBUG, "freed memory");
+		}
 	}
 
 	bool stale_block_check(int thr_id, struct work * curr_work)
 	{
 		if (!valid())
 			return false;
-
-		static const bool log_no_change = false;
 
 		static const char * reason[2] = {
 			"height diff",
@@ -180,7 +187,7 @@ public:
 						height_diff ? reason[0] : reason[1]
 					);
 				} else if (did_succeed) {
-					if (opt_debug && log_no_change) {
+					if (do_log()) {
 						gpulog(
 							LOG_DEBUG,
 							thr_id,
