@@ -106,7 +106,7 @@ public:
 
 	bool do_log(void) const
 	{
-		!opt_quiet && opt_debug && debug_log;
+		return !opt_quiet && opt_debug && debug_log;
 	}
 
 	bool init(int thr_id)
