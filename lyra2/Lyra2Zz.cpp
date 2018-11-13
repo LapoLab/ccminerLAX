@@ -1779,8 +1779,6 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 		hex2bin(sctx->job.ntime, tmp.data(), 4);
 	}
 
-//	hex2bin(sctx->job.ntime, stime, 4);
-
 	{
 		std::vector<char> tmp;
 		tmp.resize(8 + 4, 0);
@@ -1818,55 +1816,6 @@ int lyra2Zz_benchmark_set_params(int thr_id, struct work *work)
 	work->noncerange.u32[1] = UINT32_MAX;
 
 	return true;
-
-#if 0
-	LPCSTR cryptname = __FUNCTION__;
-	HCRYPTPROV hCryptProv = NULL;
-
-	if (!CryptAcquireContext(&hCryptProv, cryptname, NULL, PROV_RSA_FULL, CRYPT_NEWKEYSET)) {
-		if (GetLastError() == NTE_EXISTS) {
-			if (!CryptAcquireContext(&hCryptProv, cryptname, NULL, PROV_RSA_FULL, 0)) {
-				goto bad_context;
-			}
-		} else {
-			goto bad_context;
-		}
-	} 
-
-	lyra2zz_header_helper_t *p_header = (lyra2zz_header_helper_t *) work->data;
-
-	if (!CryptGenRandom(hCryptProv, sizeof(l2zz_uint256_32_t), (BYTE *)&p_header->accum_checkpoint[0])) {
-		goto bad_gen_random;	
-	}
-
-	if (!CryptGenRandom(hCryptProv, sizeof(l2zz_uint256_32_t), (BYTE *)&p_header->merkle_root[0])) {
-		goto bad_gen_random;	
-	}
-
-	if (!CryptGenRandom(hCryptProv, sizeof(l2zz_uint256_32_t), (BYTE *)&p_header->prev_block[0])) {
-		goto bad_gen_random;	
-	}
-
-	CryptReleaseContext(hCryptProv, NULL);
-	return true;
-
-bad_context:
-	applog(LOG_ERR, LYRA2ZZ_LOG_HEADER "Could not get HCRYPTPROV context. Error code: 0x%x", GetLastError());
-	return false;
-
-bad_gen_random:
-	if (hCryptProv) {
-		CryptReleaseContext(hCryptProv, NULL);
-	}
-
-	applog(
-		LOG_ERR, 
-		LYRA2ZZ_LOG_HEADER "Could not randomly generate buffer work header item. Error: 0x%x\n", 
-		GetLastError()
-	);
-
-	return false;
-#endif
 }
 
 void lyra2Zz_log_work_header(struct work *w)
