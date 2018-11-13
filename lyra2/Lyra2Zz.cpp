@@ -1713,32 +1713,6 @@ int lyra2Zz_stratum_notify(struct stratum_ctx *sctx, json_t *params)
 		goto out;
 	}
 
-	if (opt_debug) {
-		std::stringstream dbg_merkle_str;
-
-		for (int i = 0; i < merkle_count; ++i) {
-			dbg_merkle_str << "\t\t[" << i << "] " << json_string_value(json_array_get(merkle_arr, i)) << "\n";
-		}
-
-		applogf_fn(
-			LOG_DEBUG, 
-			"Received:\n"
-			"\tjob_id: %s\n"
-			"\tprevhash: %s\n"
-			"\tcoinbase1: %s\n"
-			"\tcoinbase2: %s\n"
-			"\tmerkle_arr: %s\n"
-			"\tmerkle_count: %i"
-			"\tversion: %s\n"
-			"\tnbits: %s\n"
-			"\tstime: %s\n"
-			"\tclean: %s\n"
-			"\taccumcheckpoint: %s\n",
-			job_id, prevhash, coinb1, coinb2, dbg_merkle_str.str().c_str(), merkle_count, 
-			version, nbits, stime, clean ? "true" : "false", accumcheckpoint
-		);
-	}
-
 	/* store stratum server time diff */
 	hex2bin((uchar *)&ntime, stime, 4);
 	ntime = swab32(ntime) - (uint32_t) time(0);
